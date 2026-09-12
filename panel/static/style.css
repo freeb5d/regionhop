@@ -244,7 +244,7 @@ form.inline { display: inline-flex; }
 table { width: 100%; border-collapse: collapse; }
 
 th {
-  text-align: left;
+  text-align: start;
   font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -379,3 +379,20 @@ pre.logs {
   .topbar { padding: 0 1rem; }
   th:nth-child(2), td:nth-child(2) { display: none; }
 }
+
+/* Language switcher */
+.lang-switch {
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+/* RTL (Persian, Arabic): flexbox and text-align:start already flip
+   direction-aware layout automatically; this covers the couple of spots
+   that don't. */
+[dir="rtl"] .breadcrumb { direction: rtl; }
+[dir="rtl"] .mono { direction: ltr; unicode-bidi: embed; } /* IPs/ports/codes stay LTR */

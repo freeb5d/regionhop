@@ -1,22 +1,27 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Logs · {{.Name}} — regionhop</title>
+{{if .Font}}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{.Font}}:wght@400;500;600;700&display=swap">{{end}}
 <link rel="stylesheet" href="{{url "/static/style.css"}}">
+{{if .Font}}<style>body{font-family:"{{.Font}}",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}</style>{{end}}
 </head>
 <body>
 <div class="page">
   <div class="topbar">
     <div class="brand"><div class="brand-mark">R</div>regionhop</div>
     <div class="nav-actions">
-      <a class="btn btn-ghost btn-sm" href="{{url "/"}}">Dashboard</a>
+      <select class="lang-switch" onchange="location.search='?lang='+this.value">
+        {{$cur := .Lang}}{{range langs}}<option value="{{.Code}}" {{if eq .Code $cur}}selected{{end}}>{{.Native}}</option>{{end}}
+      </select>
+      <a class="btn btn-ghost btn-sm" href="{{url "/"}}">{{t .Lang "nav.dashboard"}}</a>
     </div>
   </div>
 
   <div class="main">
-    <div class="breadcrumb"><a href="{{url "/"}}">Tunnels</a> / {{.Name}}</div>
+    <div class="breadcrumb"><a href="{{url "/"}}">{{t .Lang "logs.breadcrumb"}}</a> / {{.Name}}</div>
     <div class="page-header">
-      <h1>Logs: {{.Name}}</h1>
-      <div class="desc">Last 200 journal lines for this location's service.</div>
+      <h1>{{tf .Lang "logs.title" .Name}}</h1>
+      <div class="desc">{{t .Lang "logs.desc"}}</div>
     </div>
     <pre class="logs">{{.Logs}}</pre>
   </div>
