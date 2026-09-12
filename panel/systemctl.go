@@ -39,7 +39,15 @@ func runSystemctlPrivileged(args ...string) (string, error) {
 	return string(out), err
 }
 
-const selfUpdateScript = "/opt/psi-panel/panel/self-update.sh"
+// Deliberately outside /opt/psi-panel: that whole tree is owned by the
+// unprivileged psipanel user this process runs as, and directory-write
+// permission (not file permission) is what governs delete/replace — a
+// root-owned, mode-0700 script sitting in a psipanel-owned directory could
+// still be swapped out by psipanel for arbitrary content that sudo would
+// then run as root unchanged. /opt/regionhop-admin is root-owned and
+// mode 0700, so psipanel can't even list or enter it, let alone touch this
+// file — see install.sh's install_self_update_script for the write side.
+const selfUpdateScript = "/opt/regionhop-admin/self-update.sh"
 
 // triggerSelfUpdate kicks off the update in the background and returns
 // immediately: the update flow restarts psi-panel itself partway through,
