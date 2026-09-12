@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -80,4 +81,49 @@ func tunnelLogs(name string, lines int) (string, error) {
 	cmd := exec.CommandContext(ctx, "journalctl", "-u", unitName(name), "-n", fmt.Sprintf("%d", lines), "--no-pager")
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+type psiphonNotice struct {
+	NoticeType string `json:"noticeType"`
+	Data       struct {
+		Count int `json:"count"`
+	} `json:"data"`
+}
+
+// tunnelConnectionState reports what the process is actually doing, not
+// just whether systemd is running it: "connecting" while ConsoleClient is
+// still establishing a tunnel to Psiphon's network, "active" only once it's
+// actually reported a connected tunnel, and systemd's own state (inactive/
+// failed/activating/...) when the unit isn't running at all. Determined by
+// scanning recent journal output for the tunnel's own "Tunnels" notice
+// (psiphon-tunnel-core emits {"noticeType":"Tunnels","data":{"count":N}}
+// whenever its connected-tunnel count changes).
+func tunnelConnectionState(name string) string {
+	svcState := tunnelStatus(name)
+	if svcState != "active" {
+		return svcState
+	}
+
+	out, err := tunnelLogs(name, 100)
+	if err != nil {
+		return "connecting"
+	}
+	lines := strings.Split(out, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		idx := strings.IndexByte(lines[i], '{')
+		if idx < 0 {
+			continue
+		}
+		var n psiphonNotice
+		if err := json.Unmarshal([]byte(lines[i][idx:]), &n); err != nil {
+			continue
+		}
+		if n.NoticeType == "Tunnels" {
+			if n.Data.Count > 0 {
+				return "active"
+			}
+			return "connecting"
+		}
+	}
+	return "connecting"
 }
