@@ -1,62 +1,71 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Psiphon Panel</title>
-<style>
-body{font-family:system-ui,sans-serif;background:#0f1115;color:#e6e6e6;margin:0;padding:2rem}
-h1{font-size:1.3rem} .sub{color:#9aa0a6;margin-bottom:1.5rem}
-table{width:100%;border-collapse:collapse;margin-bottom:2rem}
-th,td{text-align:left;padding:.6rem;border-bottom:1px solid #262b33}
-.badge{padding:.15rem .5rem;border-radius:4px;font-size:.8rem}
-.active{background:#14532d;color:#86efac} .inactive{background:#450a0a;color:#fca5a5} .unknown{background:#3f3f46;color:#d4d4d8}
-form.inline{display:inline}
-button,.btn{background:#3b82f6;border:0;color:#fff;padding:.35rem .7rem;border-radius:6px;cursor:pointer;font-size:.85rem;margin-right:.3rem}
-button.stop{background:#ef4444} button.remove{background:#6b7280}
-.card{background:#181b21;padding:1.2rem;border-radius:10px;margin-bottom:1.5rem}
-input,select{padding:.5rem;border-radius:6px;border:1px solid #333;background:#0f1115;color:#eee;margin-right:.5rem}
-.note{color:#9aa0a6;font-size:.85rem;margin-top:.6rem}
-a.logs{color:#93c5fd;font-size:.85rem;text-decoration:none}
-.topbar{display:flex;justify-content:space-between;align-items:center}
-</style></head>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>regionhop</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
 <body>
-<div class="topbar">
-  <div>
-    <h1>Psiphon Tunnel Panel</h1>
-    <div class="sub">SOCKS proxies below are bound to 127.0.0.1 on this server only — never externally reachable.</div>
+<div class="page">
+  <div class="topbar">
+    <div class="brand"><div class="brand-mark">R</div>regionhop</div>
+    <div class="nav-actions">
+      <a class="btn btn-ghost btn-sm" href="/settings">Credentials</a>
+      <form class="inline" method="post" action="/logout"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
+    </div>
   </div>
-  <div>
-    <a class="btn" href="/settings" style="text-decoration:none;display:inline-block">Psiphon credentials</a>
-    <form class="inline" method="post" action="/logout"><button type="submit">Log out</button></form>
+
+  <div class="main">
+    <div class="page-header">
+      <h1>Tunnels</h1>
+      <div class="desc">Each location runs its own Psiphon tunnel instance. SOCKS proxies are bound to 127.0.0.1 on this server only — never reachable from outside.</div>
+    </div>
+
+    <div class="card">
+      <h2>Add location</h2>
+      <form method="post" action="/tunnels/add">
+        <div class="inline-form">
+          <div class="field">
+            <label for="name">Name</label>
+            <input id="name" type="text" name="name" placeholder="e.g. de-1" required pattern="[a-z0-9][a-z0-9-]{1,30}">
+          </div>
+          <div class="field">
+            <label for="region">Region</label>
+            <select id="region" name="region">
+              {{range .Regions}}<option value="{{.Code}}">{{.Label}}</option>{{end}}
+            </select>
+          </div>
+          <button type="submit">Add + start</button>
+        </div>
+      </form>
+      <div class="card-sub">Port is assigned automatically from the internal range and is always bound to loopback.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Region</th><th>SOCKS</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+        {{range .Tunnels}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td class="mono">{{.Region}}</td>
+          <td class="mono">127.0.0.1:{{.SocksPort}}</td>
+          <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
+          <td>
+            <div class="actions">
+              <form class="inline" method="post" action="/tunnels/{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">Restart</button></form>
+              <form class="inline" method="post" action="/tunnels/{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">Stop</button></form>
+              <form class="inline" method="post" action="/tunnels/{{.Name}}/remove" onsubmit="return confirm('Remove {{.Name}}?');"><button class="btn-danger btn-sm" type="submit">Remove</button></form>
+              <a class="btn btn-ghost btn-sm" href="/tunnels/{{.Name}}/logs">Logs</a>
+            </div>
+          </td>
+        </tr>
+        {{else}}
+        <tr class="empty-row"><td colspan="5">No locations yet — add one above to get started.</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
-
-<div class="card">
-  <h2 style="margin-top:0;font-size:1rem">Add location</h2>
-  <form method="post" action="/tunnels/add">
-    <input type="text" name="name" placeholder="name e.g. de-1" required pattern="[a-z0-9][a-z0-9-]{1,30}">
-    <select name="region">
-      {{range .Regions}}<option value="{{.Code}}">{{.Label}}</option>{{end}}
-    </select>
-    <button type="submit">Add + start</button>
-  </form>
-  <div class="note">Port is assigned automatically from the internal range and always bound to loopback.</div>
-</div>
-
-<table>
-<tr><th>Name</th><th>Region</th><th>SOCKS (local)</th><th>Status</th><th>Actions</th></tr>
-{{range .Tunnels}}
-<tr>
-  <td>{{.Name}}</td>
-  <td>{{.Region}}</td>
-  <td>127.0.0.1:{{.SocksPort}}</td>
-  <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
-  <td>
-    <form class="inline" method="post" action="/tunnels/{{.Name}}/restart"><button type="submit">Restart</button></form>
-    <form class="inline" method="post" action="/tunnels/{{.Name}}/stop"><button class="stop" type="submit">Stop</button></form>
-    <form class="inline" method="post" action="/tunnels/{{.Name}}/remove" onsubmit="return confirm('Remove {{.Name}}?');"><button class="remove" type="submit">Remove</button></form>
-    <a class="logs" href="/tunnels/{{.Name}}/logs">logs</a>
-  </td>
-</tr>
-{{else}}
-<tr><td colspan="5" class="note">No locations yet — add one above.</td></tr>
-{{end}}
-</table>
 </body></html>

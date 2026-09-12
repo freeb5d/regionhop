@@ -1,12 +1,24 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Logs — {{.Name}}</title>
-<style>
-body{font-family:system-ui,sans-serif;background:#0f1115;color:#e6e6e6;margin:0;padding:2rem}
-pre{background:#181b21;padding:1rem;border-radius:8px;overflow:auto;white-space:pre-wrap;font-size:.85rem}
-a{color:#93c5fd}
-</style></head>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logs · {{.Name}} — regionhop</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
 <body>
-<p><a href="/">&larr; back</a></p>
-<h1>Logs: {{.Name}}</h1>
-<pre>{{.Logs}}</pre>
+<div class="page">
+  <div class="topbar">
+    <div class="brand"><div class="brand-mark">R</div>regionhop</div>
+    <div class="nav-actions">
+      <a class="btn btn-ghost btn-sm" href="/">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="breadcrumb"><a href="/">Tunnels</a> / {{.Name}}</div>
+    <div class="page-header">
+      <h1>Logs: {{.Name}}</h1>
+      <div class="desc">Last 200 journal lines for this location's service.</div>
+    </div>
+    <pre class="logs">{{.Logs}}</pre>
+  </div>
+</div>
 </body></html>
