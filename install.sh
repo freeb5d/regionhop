@@ -65,13 +65,20 @@ setup_polkit() {
   mkdir -p /etc/polkit-1/rules.d
   cat > /etc/polkit-1/rules.d/49-regionhop.rules <<'EOF'
 polkit.addRule(function(action, subject) {
-    if (action.id == "org.freedesktop.systemd1.manage-units" &&
-        subject.user == "psipanel") {
-        var unit = action.lookup("unit");
-        if (unit && (/^psi-tunnel@.*\.service$/.test(unit) || unit == "psi-panel.service")) {
-            return polkit.Result.YES;
-        }
+    // start/stop/restart need manage-units; enable/disable (used by the
+    // panel's --now flag) need manage-unit-files — grant both, scoped to
+    // exactly the units the panel is meant to control.
+    var scoped = (action.id == "org.freedesktop.systemd1.manage-units" ||
+                  action.id == "org.freedesktop.systemd1.manage-unit-files") &&
+                 subject.user == "psipanel";
+    if (!scoped) {
+        return polkit.Result.NOT_HANDLED;
     }
+    var unit = action.lookup("unit");
+    if (unit && (/^psi-tunnel@.*\.service$/.test(unit) || unit == "psi-panel.service")) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
 });
 EOF
   systemctl try-restart polkit 2>/dev/null || systemctl try-restart polkitd 2>/dev/null || true
