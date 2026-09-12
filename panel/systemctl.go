@@ -86,30 +86,44 @@ func tunnelLogs(name string, lines int) (string, error) {
 type psiphonNotice struct {
 	NoticeType string `json:"noticeType"`
 	Data       struct {
-		Count int `json:"count"`
+		Count  int    `json:"count"`
+		Region string `json:"region"`
 	} `json:"data"`
 }
 
-// tunnelConnectionState reports what the process is actually doing, not
-// just whether systemd is running it: "connecting" while ConsoleClient is
-// still establishing a tunnel to Psiphon's network, "active" only once it's
-// actually reported a connected tunnel, and systemd's own state (inactive/
-// failed/activating/...) when the unit isn't running at all. Determined by
-// scanning recent journal output for the tunnel's own "Tunnels" notice
-// (psiphon-tunnel-core emits {"noticeType":"Tunnels","data":{"count":N}}
-// whenever its connected-tunnel count changes).
-func tunnelConnectionState(name string) string {
+// tunnelInfo is what a single journal scan determines about a location:
+// its real connection state (not just whether systemd is running it) and,
+// once connected, which Psiphon server region it landed on.
+type tunnelInfo struct {
+	State  string // "active" (tunnel established), "connecting", or systemd's own state (inactive/failed/...)
+	Region string // 2-letter code from ConnectedServerRegion, once known
+}
+
+// tunnelStatusInfo reports what the process is actually doing, not just
+// whether systemd is running it, and which server region it's connected to.
+// "connecting" while ConsoleClient is still establishing a tunnel,
+// "active" only once it's actually reported a connected tunnel, and
+// systemd's own state (inactive/failed/activating/...) when the unit isn't
+// running at all. Both are read from a single backward scan of recent
+// journal output: psiphon-tunnel-core emits
+// {"noticeType":"Tunnels","data":{"count":N}} whenever its connected-tunnel
+// count changes, and {"noticeType":"ConnectedServerRegion","data":{"region":"XX"}}
+// once it lands on a server.
+func tunnelStatusInfo(name string) tunnelInfo {
 	svcState := tunnelStatus(name)
 	if svcState != "active" {
-		return svcState
+		return tunnelInfo{State: svcState}
 	}
 
-	out, err := tunnelLogs(name, 100)
+	out, err := tunnelLogs(name, 200)
 	if err != nil {
-		return "connecting"
+		return tunnelInfo{State: "connecting"}
 	}
+
+	state := ""
+	region := ""
 	lines := strings.Split(out, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
+	for i := len(lines) - 1; i >= 0 && (state == "" || region == ""); i-- {
 		idx := strings.IndexByte(lines[i], '{')
 		if idx < 0 {
 			continue
@@ -118,12 +132,36 @@ func tunnelConnectionState(name string) string {
 		if err := json.Unmarshal([]byte(lines[i][idx:]), &n); err != nil {
 			continue
 		}
-		if n.NoticeType == "Tunnels" {
-			if n.Data.Count > 0 {
-				return "active"
+		switch n.NoticeType {
+		case "Tunnels":
+			if state == "" {
+				if n.Data.Count > 0 {
+					state = "active"
+				} else {
+					state = "connecting"
+				}
 			}
-			return "connecting"
+		case "ConnectedServerRegion":
+			if region == "" {
+				region = n.Data.Region
+			}
 		}
 	}
-	return "connecting"
+	if state == "" {
+		state = "connecting"
+	}
+	return tunnelInfo{State: state, Region: region}
+}
+
+// countryFlag turns a 2-letter ISO country code into its flag emoji by
+// mapping each letter to a Unicode regional indicator symbol.
+func countryFlag(code string) string {
+	if len(code) != 2 {
+		return ""
+	}
+	a, b := code[0], code[1]
+	if a < 'A' || a > 'Z' || b < 'A' || b > 'Z' {
+		return ""
+	}
+	return string(rune(0x1F1E6+int(a-'A'))) + string(rune(0x1F1E6+int(b-'A')))
 }
