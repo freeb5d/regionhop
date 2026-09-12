@@ -59,8 +59,8 @@
           <td class="mono">{{.Region}}</td>
           <td class="mono">127.0.0.1:{{.SocksPort}}</td>
           <td><span class="badge {{.StatusClass}}" data-role="status">{{.Status}}</span></td>
-          <td style="font-size:1.15rem" title="{{.ExitRegion}}" data-role="exit">
-            {{if .ExitRegionFlag}}{{.ExitRegionFlag}}{{else if eq .Status "active"}}<span class="note" style="font-size:0.85rem">…</span>{{else}}<span class="note" style="font-size:0.85rem">—</span>{{end}}
+          <td title="{{.ExitRegion}}" data-role="exit">
+            {{if .ExitFlagURL}}<img src="{{.ExitFlagURL}}" alt="{{.ExitRegion}}" width="20" height="15" style="vertical-align:middle;border-radius:2px">{{else if eq .Status "active"}}<span class="note">…</span>{{else}}<span class="note">—</span>{{end}}
           </td>
           <td>
             <div class="actions">
@@ -105,12 +105,13 @@
     var exitEl = tr.querySelector('[data-role="exit"]');
     if (exitEl) {
       exitEl.title = row.ExitRegion || "";
-      if (row.ExitRegionFlag) {
-        exitEl.textContent = row.ExitRegionFlag;
+      if (row.ExitFlagURL) {
+        exitEl.innerHTML = '<img src="' + row.ExitFlagURL + '" alt="' + (row.ExitRegion || "") +
+          '" width="20" height="15" style="vertical-align:middle;border-radius:2px">';
       } else if (row.Status === "active") {
-        exitEl.innerHTML = '<span class="note" style="font-size:0.85rem">…</span>';
+        exitEl.innerHTML = '<span class="note">…</span>';
       } else {
-        exitEl.innerHTML = '<span class="note" style="font-size:0.85rem">—</span>';
+        exitEl.innerHTML = '<span class="note">—</span>';
       }
     }
   }
