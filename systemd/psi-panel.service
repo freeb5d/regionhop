@@ -12,7 +12,11 @@ Restart=on-failure
 RestartSec=5
 User=psipanel
 Group=psipanel
-NoNewPrivileges=true
+# NoNewPrivileges is intentionally NOT set here: the panel needs to exec
+# `sudo systemctl ...` (via a narrowly-scoped, NOPASSWD sudoers rule — see
+# install.sh's setup_sudo_control()) to manage the psi-tunnel@*.service and
+# psi-panel.service units it's responsible for. NoNewPrivileges would block
+# sudo's setuid escalation entirely.
 
 [Install]
 WantedBy=multi-user.target
