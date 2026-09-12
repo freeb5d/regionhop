@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in — regionhop</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="{{url "/static/style.css"}}">
 </head>
 <body>
 <div class="login-shell">
@@ -11,7 +11,7 @@
       <span>regionhop</span>
     </div>
     {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
-    <form method="post" action="/login">
+    <form method="post" action="{{url "/login"}}">
       <div class="field">
         <label for="password">Admin password</label>
         <input id="password" type="password" name="password" autofocus required autocomplete="current-password">
