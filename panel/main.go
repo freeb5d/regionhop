@@ -129,6 +129,9 @@ type row struct {
 	SocksPort   int
 	Status      string
 	StatusClass string
+	ExitIP      string
+	ExitCountry string
+	ExitFlag    string
 }
 
 func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +157,12 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		case "inactive", "failed":
 			class = "inactive"
 		}
-		rows = append(rows, row{Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort, Status: st, StatusClass: class})
+		info := exitInfoFor(t.Name, t.SocksPort, st == "active")
+		rows = append(rows, row{
+			Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort,
+			Status: st, StatusClass: class,
+			ExitIP: info.IP, ExitCountry: info.Country, ExitFlag: countryFlag(info.CountryCode),
+		})
 	}
 
 	regions := make([]regionOpt, 0, len(regionCodes))
