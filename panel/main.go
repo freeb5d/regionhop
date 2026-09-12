@@ -82,7 +82,11 @@ func main() {
 	// same as any other unknown path — this is what actually hides the
 	// panel from scanners hitting the raw port, not just cosmetic.
 	mux := http.NewServeMux()
-	mux.Handle(basePath+"/static/", http.FileServer(http.FS(staticFS)))
+	// http.FileServer looks up paths against the embedded FS as-is (which
+	// still has its original "static/..." layout); StripPrefix removes only
+	// basePath from the incoming request so what's left ("/static/...")
+	// matches that layout again, same as when basePath is empty.
+	mux.Handle(basePath+"/static/", http.StripPrefix(basePath, http.FileServer(http.FS(staticFS))))
 	mux.HandleFunc(basePath+"/login", a.handleLogin)
 	mux.HandleFunc(basePath+"/logout", a.requireAuth(a.handleLogout))
 	mux.HandleFunc(basePath+"/", a.requireAuth(a.handleDashboard))
