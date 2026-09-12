@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 //go:embed templates/*.html
@@ -62,6 +63,8 @@ func main() {
 		propagationChannelID: propagationChannelID,
 		sponsorID:            sponsorID,
 	}
+
+	startUpdateChecker(1 * time.Hour)
 
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
@@ -162,9 +165,13 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(regions, func(i, j int) bool { return regions[i].Label < regions[j].Label })
 
+	latest, available, _, _ := updates.snapshot()
 	tmpl.ExecuteTemplate(w, "dashboard.html", map[string]any{
-		"Tunnels": rows,
-		"Regions": regions,
+		"Tunnels":         rows,
+		"Regions":         regions,
+		"CurrentVersion":  CurrentVersion,
+		"LatestVersion":   latest,
+		"UpdateAvailable": available,
 	})
 }
 
