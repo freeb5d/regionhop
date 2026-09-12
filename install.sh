@@ -6,6 +6,7 @@
 set -euo pipefail
 
 PREFIX=/opt/psi-panel
+ADMIN_DIR=/opt/regionhop-admin
 REPO="freeb5d/regionhop"
 REPO_URL="https://github.com/${REPO}.git"
 CHECKOUT_DIR=/opt/regionhop-src
@@ -82,7 +83,7 @@ Cmnd_Alias REGIONHOP_TUNNEL_ENABLE = $systemctl_path enable --now psi-tunnel@*
 Cmnd_Alias REGIONHOP_TUNNEL_DISABLE = $systemctl_path disable --now psi-tunnel@*
 Cmnd_Alias REGIONHOP_TUNNEL_RESTART = $systemctl_path restart psi-tunnel@*
 Cmnd_Alias REGIONHOP_PANEL_RESTART = $systemctl_path restart psi-panel
-Cmnd_Alias REGIONHOP_SELF_UPDATE = $PREFIX/panel/self-update.sh
+Cmnd_Alias REGIONHOP_SELF_UPDATE = $ADMIN_DIR/self-update.sh
 $SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE
 EOF
   if visudo -c -f "$tmp" &>/dev/null; then
@@ -100,14 +101,29 @@ install_self_update_script() {
   # narrowly in sudoers). It just re-runs the same update flow `psictl
   # update` already uses over SSH; the panel's "Update now" button is not a
   # separate/wider privilege surface than that.
-  mkdir -p "$PREFIX/panel"
-  cat > "$PREFIX/panel/self-update.sh" <<EOF
+  #
+  # This MUST live outside $PREFIX: ensure_dirs() recursively chowns all of
+  # $PREFIX to the unprivileged psipanel user, and Unix delete/replace
+  # permission is governed by the *directory's* write bit, not the file's —
+  # so a root-owned, mode-0700 script sitting inside a psipanel-owned
+  # directory can still be deleted and recreated by psipanel with arbitrary
+  # content, which sudo would then run as root unchanged (sudoers matches
+  # by path, not by the file it pointed to when the rule was written). A
+  # dedicated, root-owned, mode-0700 directory that psipanel can't even
+  # list or enter is what actually keeps this scoped.
+  mkdir -p "$ADMIN_DIR"
+  chown root:root "$ADMIN_DIR"
+  chmod 0700 "$ADMIN_DIR"
+  # Clean up the old, vulnerable location from earlier regionhop versions
+  # (it lived inside psipanel-owned $PREFIX/panel/ — see the comment below).
+  rm -f "$PREFIX/panel/self-update.sh"
+  cat > "$ADMIN_DIR/self-update.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 exec bash <(curl -Ls https://raw.githubusercontent.com/${REPO}/master/install.sh) update
 EOF
-  chown root:root "$PREFIX/panel/self-update.sh"
-  chmod 0700 "$PREFIX/panel/self-update.sh"
+  chown root:root "$ADMIN_DIR/self-update.sh"
+  chmod 0700 "$ADMIN_DIR/self-update.sh"
 }
 
 ensure_dirs() {
@@ -412,7 +428,7 @@ uninstall_all() {
   rm -f /etc/systemd/system/psi-panel.service /etc/systemd/system/psi-tunnel@.service
   systemctl daemon-reload
   rm -f /etc/sudoers.d/regionhop-psipanel /etc/polkit-1/rules.d/49-regionhop.rules
-  rm -rf "$PREFIX" /usr/local/bin/psictl
+  rm -rf "$PREFIX" "$ADMIN_DIR" /usr/local/bin/psictl
   userdel "$SERVICE_USER" 2>/dev/null || true
   echo "Removed."
 }
