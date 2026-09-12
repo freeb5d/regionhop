@@ -48,6 +48,7 @@ a `psictl` command.
 - ⌨️ **SSH-side control** — `psictl list|start|stop|restart|logs` for anyone who prefers the terminal
 - ⚙️ **systemd-native** — every tunnel and the panel itself are ordinary systemd services: `systemctl status`, `journalctl`, auto-restart on failure, all work as expected
 - 🔄 **Self-updating** — one command pulls the latest release and restarts the panel; the dashboard tells you when one's available
+- 🌐 **Multi-language panel** — English, فارسی (Vazirmatn font, RTL), العربية (RTL), Русский, 中文; a switcher on every page, remembered per browser
 
 ## Requirements
 

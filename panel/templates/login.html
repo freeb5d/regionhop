@@ -1,7 +1,9 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in — regionhop</title>
+{{if .Font}}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{.Font}}:wght@400;500;600;700&display=swap">{{end}}
 <link rel="stylesheet" href="{{url "/static/style.css"}}">
+{{if .Font}}<style>body{font-family:"{{.Font}}",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}</style>{{end}}
 </head>
 <body>
 <div class="login-shell">
@@ -13,11 +15,14 @@
     {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
     <form method="post" action="{{url "/login"}}">
       <div class="field">
-        <label for="password">Admin password</label>
+        <label for="password">{{t .Lang "login.title"}}</label>
         <input id="password" type="password" name="password" autofocus required autocomplete="current-password">
       </div>
-      <button type="submit">Sign in</button>
+      <button type="submit">{{t .Lang "login.submit"}}</button>
     </form>
+    <select class="lang-switch" onchange="location.search='?lang='+this.value" style="margin-top:1rem;width:100%">
+      {{$cur := .Lang}}{{range langs}}<option value="{{.Code}}" {{if eq .Code $cur}}selected{{end}}>{{.Native}}</option>{{end}}
+    </select>
   </div>
 </div>
 </body></html>

@@ -1,30 +1,35 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Credentials — regionhop</title>
+{{if .Font}}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{.Font}}:wght@400;500;600;700&display=swap">{{end}}
 <link rel="stylesheet" href="{{url "/static/style.css"}}">
+{{if .Font}}<style>body{font-family:"{{.Font}}",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}</style>{{end}}
 </head>
 <body>
 <div class="page">
   <div class="topbar">
     <div class="brand"><div class="brand-mark">R</div>regionhop</div>
     <div class="nav-actions">
-      <a class="btn btn-ghost btn-sm" href="{{url "/"}}">Dashboard</a>
-      <form class="inline" method="post" action="{{url "/logout"}}"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
+      <select class="lang-switch" onchange="location.search='?lang='+this.value">
+        {{$cur := .Lang}}{{range langs}}<option value="{{.Code}}" {{if eq .Code $cur}}selected{{end}}>{{.Native}}</option>{{end}}
+      </select>
+      <a class="btn btn-ghost btn-sm" href="{{url "/"}}">{{t .Lang "nav.dashboard"}}</a>
+      <form class="inline" method="post" action="{{url "/logout"}}"><button class="btn-ghost btn-sm" type="submit">{{t .Lang "nav.logout"}}</button></form>
     </div>
   </div>
 
   <div class="main" style="max-width:640px">
     <div class="page-header">
-      <h1>Psiphon config</h1>
-      <div class="desc">Applied to every new location added from now on.</div>
+      <h1>{{t .Lang "creds.title"}}</h1>
+      <div class="desc">{{t .Lang "creds.desc"}}</div>
     </div>
 
     <div class="card">
-      {{if .Saved}}<div class="alert alert-success">Saved.</div>{{end}}
+      {{if .Saved}}<div class="alert alert-success">{{t .Lang "creds.saved"}}</div>{{end}}
       {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
       <form method="post" action="{{url "/settings"}}">
         <div class="field">
-          <label for="cfg">Config JSON</label>
+          <label for="cfg">{{t .Lang "creds.label"}}</label>
           <textarea id="cfg" name="config_json" autocomplete="off" rows="14" placeholder='{
   "PropagationChannelId": "...",
   "SponsorId": "...",
@@ -35,22 +40,11 @@
   "NetworkID": "..."
 }'>{{.ConfigJSON}}</textarea>
         </div>
-        <button type="submit">Save</button>
+        <button type="submit">{{t .Lang "creds.submit"}}</button>
       </form>
       <div class="card-sub">
-        Paste the full JSON object from your own Psiphon deployment config —
-        <span class="mono">PropagationChannelId</span>, <span class="mono">SponsorId</span>,
-        and anything else it includes. Applied to every location added from
-        now on; not retroactively applied to existing ones — remove and
-        re-add a location (or edit
-        <span class="mono">/opt/psi-panel/configs/&lt;name&gt;.json</span> directly)
-        to update it.<br><br>
-        <span class="mono">EgressRegion</span>, <span class="mono">LocalSocksProxyPort</span>,
-        <span class="mono">ListenInterface</span>, and <span class="mono">DataRootDirectory</span>
-        always come from regionhop itself and cannot be overridden here, no
-        matter what's pasted — that's what keeps every SOCKS proxy bound to
-        127.0.0.1. regionhop does not supply, validate, or know the meaning
-        of anything you put in this box.
+        {{t .Lang "creds.note1"}}<br><br>
+        {{t .Lang "creds.note2"}}
       </div>
     </div>
   </div>

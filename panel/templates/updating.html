@@ -1,8 +1,10 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="20;url={{url "/"}}">
 <title>Updating — regionhop</title>
+{{if .Font}}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{.Font}}:wght@400;500;600;700&display=swap">{{end}}
 <link rel="stylesheet" href="{{url "/static/style.css"}}">
+{{if .Font}}<style>body{font-family:"{{.Font}}",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}</style>{{end}}
 </head>
 <body>
 <div class="login-shell">
@@ -12,10 +14,9 @@
       <span>regionhop</span>
     </div>
     <p style="color:var(--text-muted);font-size:0.9rem;line-height:1.5">
-      Update started. The panel will rebuild/redownload itself and restart —
-      this page will retry automatically in a few seconds.
+      {{t .Lang "updating.title"}}
     </p>
-    <a class="btn btn-primary" href="{{url "/"}}" style="width:100%;justify-content:center;margin-top:0.5rem">Back to dashboard now</a>
+    <a class="btn btn-primary" href="{{url "/"}}" style="width:100%;justify-content:center;margin-top:0.5rem">{{t .Lang "updating.back"}}</a>
   </div>
 </div>
 </body></html>
