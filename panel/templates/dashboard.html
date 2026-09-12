@@ -14,6 +14,12 @@
   </div>
 
   <div class="main">
+    {{if .UpdateAvailable}}
+    <div class="alert alert-update">
+      Update available: <strong>v{{.LatestVersion}}</strong> (running v{{.CurrentVersion}}).
+      Run <span class="mono">psictl update</span> or <span class="mono">sudo bash &lt;(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update</span> on the server to apply it.
+    </div>
+    {{end}}
     <div class="page-header">
       <h1>Tunnels</h1>
       <div class="desc">Each location runs its own Psiphon tunnel instance. SOCKS proxies are bound to 127.0.0.1 on this server only — never reachable from outside.</div>
@@ -66,6 +72,7 @@
         </tbody>
       </table>
     </div>
+    <div class="note" style="margin-top:1rem">regionhop v{{.CurrentVersion}}</div>
   </div>
 </div>
 </body></html>

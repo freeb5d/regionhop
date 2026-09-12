@@ -6,12 +6,14 @@
 set -euo pipefail
 
 PREFIX=/opt/psi-panel
-REPO_URL="https://github.com/freeb5d/regionhop.git"
+REPO="freeb5d/regionhop"
+REPO_URL="https://github.com/${REPO}.git"
 CHECKOUT_DIR=/opt/regionhop-src
 SERVICE_USER=psipanel
 GO_VERSION=1.22.9
 PANEL_ENV="$PREFIX/panel/panel.env"
 REGISTRY="$PREFIX/data/tunnels.json"
+VERSION_FILE="$PREFIX/VERSION"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run this as root, e.g.:" >&2
@@ -83,10 +85,48 @@ build_core() {
   echo "NOTE: edit propagation/sponsor IDs via menu option 'Set Psiphon IDs' before adding locations."
 }
 
-build_panel() {
-  echo "Building web panel..."
-  (cd "$SRC_DIR/panel" && go mod tidy && go build -o "$PREFIX/panel/psi-panel" .)
+repo_version() {
+  # Version string for this checkout (from VERSION file), used to stamp the
+  # panel binary and to compare against GitHub's latest release.
+  if [[ -f "$SRC_DIR/VERSION" ]]; then
+    tr -d ' \t\n\r' < "$SRC_DIR/VERSION"
+  else
+    echo "0.0.0"
+  fi
+}
+
+latest_release_tag() {
+  # Prints e.g. "v1.1.0", empty on failure. Requires curl.
+  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+    | grep -o '"tag_name": *"[^"]*"' | head -1 | sed -E 's/.*"([^"]+)"$/\1/'
+}
+
+download_panel_binary() {
+  # Fast path: fetch the prebuilt linux/amd64 panel binary from the given
+  # release tag (e.g. "v1.1.0"). Returns non-zero if unavailable so callers
+  # fall back to building from source.
+  local tag="$1" arch
+  arch=$(dpkg --print-architecture)
+  [[ "$arch" == "amd64" ]] || return 1
+  local url="https://github.com/${REPO}/releases/download/${tag}/regionhop-panel-linux-amd64"
+  echo "Downloading prebuilt panel binary ($tag)..."
+  curl -fsSL "$url" -o "$PREFIX/panel/psi-panel.new" || return 1
+  chmod +x "$PREFIX/panel/psi-panel.new"
+  mv "$PREFIX/panel/psi-panel.new" "$PREFIX/panel/psi-panel"
   chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/panel/psi-panel"
+}
+
+build_panel() {
+  local tag
+  tag="v$(repo_version)"
+  if download_panel_binary "$tag"; then
+    echo "Panel installed from prebuilt release binary."
+  else
+    echo "Prebuilt binary unavailable, building web panel from source..."
+    (cd "$SRC_DIR/panel" && go mod tidy && go build -ldflags "-X main.CurrentVersion=$(repo_version)" -o "$PREFIX/panel/psi-panel" .)
+    chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/panel/psi-panel"
+  fi
+  echo "$(repo_version)" > "$VERSION_FILE"
 }
 
 install_units() {
@@ -193,11 +233,62 @@ case "${1:-}" in
   logs) journalctl -u "psi-tunnel@$2" -n 200 --no-pager ;;
   panel-logs) journalctl -u psi-panel -n 200 --no-pager ;;
   panel-restart) systemctl restart psi-panel ;;
-  *) echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-logs | panel-restart" ;;
+  update) bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update ;;
+  check-update) bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) check-update ;;
+  *) echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-logs | panel-restart | update | check-update" ;;
 esac
 EOF
   chmod +x /usr/local/bin/psictl
   echo "Installed 'psictl' — try: psictl list"
+}
+
+version_lt() {
+  # true if $1 < $2, comparing dotted numeric versions
+  [[ "$1" == "$2" ]] && return 1
+  [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" == "$1" ]]
+}
+
+check_update() {
+  local installed latest
+  installed=$([[ -f "$VERSION_FILE" ]] && cat "$VERSION_FILE" || echo "0.0.0")
+  latest=$(latest_release_tag)
+  latest=${latest#v}
+  if [[ -z "$latest" ]]; then
+    echo "Could not reach GitHub to check for updates."
+    return 1
+  fi
+  echo "Installed: $installed"
+  echo "Latest:    $latest"
+  if version_lt "$installed" "$latest"; then
+    echo "Update available. Run: sudo bash <(curl -Ls https://raw.githubusercontent.com/${REPO}/master/install.sh) update"
+    return 2
+  fi
+  echo "Up to date."
+}
+
+self_update() {
+  echo "Checking for updates..."
+  local latest
+  latest=$(latest_release_tag)
+  if [[ -z "$latest" ]]; then
+    echo "Could not reach GitHub to check for updates." >&2
+    return 1
+  fi
+  echo "Updating checkout to $latest..."
+  if [[ -d "$CHECKOUT_DIR/.git" ]]; then
+    git -C "$CHECKOUT_DIR" fetch --depth 1 origin "$latest"
+    git -C "$CHECKOUT_DIR" checkout -q "$latest" 2>/dev/null || git -C "$CHECKOUT_DIR" checkout -q master
+  else
+    rm -rf "$CHECKOUT_DIR"
+    git clone --depth 1 --branch "$latest" "$REPO_URL" "$CHECKOUT_DIR" 2>/dev/null \
+      || git clone --depth 1 "$REPO_URL" "$CHECKOUT_DIR"
+  fi
+  SRC_DIR="$CHECKOUT_DIR"
+  build_panel
+  install_units
+  systemctl restart psi-panel 2>/dev/null || true
+  echo "Updated panel to $(repo_version)."
+  echo "Note: the Psiphon core (ConsoleClient) is not touched by 'update' — rerun 'Rebuild core only' from the menu if you want to rebuild it against the latest psiphon-tunnel-core source too."
 }
 
 uninstall_all() {
@@ -225,6 +316,8 @@ menu() {
     "Start/enable panel"
     "Install psictl (SSH CLI)"
     "Show status"
+    "Check for updates"
+    "Update to latest release"
     "Uninstall everything"
     "Quit"
   )
@@ -242,11 +335,23 @@ menu() {
       6) install_units; start_panel ;;
       7) install_psictl ;;
       8) status_all ;;
-      9) uninstall_all ;;
-      10) break ;;
+      9) check_update || true ;;
+      10) self_update ;;
+      11) uninstall_all ;;
+      12) break ;;
       *) echo "Invalid option" ;;
     esac
   done
 }
+
+# Non-interactive entry points, so `psictl update` / `psictl check-update`
+# (and the panel's "update available" banner) can drive this script without
+# the interactive select menu:
+#   bash install.sh update         (or piped via curl, see README)
+#   bash install.sh check-update
+case "${1:-}" in
+  update) self_update; exit 0 ;;
+  check-update) check_update; exit $? ;;
+esac
 
 menu
