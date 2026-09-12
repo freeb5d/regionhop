@@ -15,9 +15,11 @@
 
   <div class="main">
     {{if .UpdateAvailable}}
-    <div class="alert alert-update">
-      Update available: <strong>v{{.LatestVersion}}</strong> (running v{{.CurrentVersion}}).
-      Run <span class="mono">psictl update</span> or <span class="mono">sudo bash &lt;(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update</span> on the server to apply it.
+    <div class="alert alert-update" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <span>Update available: <strong>v{{.LatestVersion}}</strong> (running v{{.CurrentVersion}}).</span>
+      <form class="inline" method="post" action="/update" onsubmit="return confirm('Update regionhop now? The panel will restart automatically.');">
+        <button type="submit" class="btn-sm">Update now</button>
+      </form>
     </div>
     {{end}}
     <div class="page-header">
@@ -52,12 +54,12 @@
         </thead>
         <tbody>
         {{range .Tunnels}}
-        <tr>
+        <tr data-tunnel="{{.Name}}">
           <td>{{.Name}}</td>
           <td class="mono">{{.Region}}</td>
           <td class="mono">127.0.0.1:{{.SocksPort}}</td>
-          <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
-          <td style="font-size:1.15rem" title="{{.ExitRegion}}">
+          <td><span class="badge {{.StatusClass}}" data-role="status">{{.Status}}</span></td>
+          <td style="font-size:1.15rem" title="{{.ExitRegion}}" data-role="exit">
             {{if .ExitRegionFlag}}{{.ExitRegionFlag}}{{else if eq .Status "active"}}<span class="note" style="font-size:0.85rem">…</span>{{else}}<span class="note" style="font-size:0.85rem">—</span>{{end}}
           </td>
           <td>
@@ -75,7 +77,54 @@
         </tbody>
       </table>
     </div>
-    <div class="note" style="margin-top:1rem">regionhop v{{.CurrentVersion}}</div>
+    <div class="note" style="margin-top:1rem;display:flex;align-items:center;gap:0.6rem">
+      regionhop v{{.CurrentVersion}}
+      <form class="inline" method="post" action="/update/check">
+        <button type="submit" class="btn-ghost btn-sm" style="padding:0.1rem 0.5rem;font-size:0.75rem">Check for updates</button>
+      </form>
+    </div>
   </div>
 </div>
+<script>
+// Polls /tunnels-status and patches status badges + exit flags in place,
+// so a connecting -> active transition (or any status change) shows up
+// without the user having to reload the page.
+(function () {
+  var STATUS_LABEL = { active: "active", connecting: "connecting", inactive: "inactive", failed: "failed" };
+
+  function applyUpdate(row) {
+    var tr = document.querySelector('tr[data-tunnel="' + CSS.escape(row.Name) + '"]');
+    if (!tr) return;
+
+    var statusEl = tr.querySelector('[data-role="status"]');
+    if (statusEl) {
+      statusEl.className = "badge " + row.StatusClass;
+      statusEl.textContent = row.Status;
+    }
+
+    var exitEl = tr.querySelector('[data-role="exit"]');
+    if (exitEl) {
+      exitEl.title = row.ExitRegion || "";
+      if (row.ExitRegionFlag) {
+        exitEl.textContent = row.ExitRegionFlag;
+      } else if (row.Status === "active") {
+        exitEl.innerHTML = '<span class="note" style="font-size:0.85rem">…</span>';
+      } else {
+        exitEl.innerHTML = '<span class="note" style="font-size:0.85rem">—</span>';
+      }
+    }
+  }
+
+  function poll() {
+    fetch("/tunnels-status", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (rows) { (rows || []).forEach(applyUpdate); })
+      .catch(function () { /* transient failure, try again next tick */ });
+  }
+
+  if (document.querySelector("tr[data-tunnel]")) {
+    setInterval(poll, 3000);
+  }
+})();
+</script>
 </body></html>

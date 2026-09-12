@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -36,6 +37,34 @@ func runSystemctlPrivileged(args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "sudo", fullArgs...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+const selfUpdateScript = "/opt/psi-panel/panel/self-update.sh"
+
+// triggerSelfUpdate kicks off the update in the background and returns
+// immediately: the update flow restarts psi-panel itself partway through,
+// which would otherwise cut off the HTTP response mid-request. Output goes
+// to a log file (not the panel's own stdout/journal, which is about to
+// vanish along with this process) so a failure is diagnosable afterward via
+// `psictl panel-logs` or by reading the file directly.
+func triggerSelfUpdate() error {
+	logPath := "/opt/psi-panel/panel/update.log"
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("sudo", "-n", selfUpdateScript)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if err := cmd.Start(); err != nil {
+		logFile.Close()
+		return err
+	}
+	go func() {
+		cmd.Wait()
+		logFile.Close()
+	}()
+	return nil
 }
 
 // wrapErr folds systemctl's own stderr/stdout into the returned error so
