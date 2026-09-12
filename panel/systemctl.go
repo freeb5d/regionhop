@@ -214,7 +214,11 @@ func connectedServerRegion(name string) string {
 }
 
 // countryFlag turns a 2-letter ISO country code into its flag emoji by
-// mapping each letter to a Unicode regional indicator symbol.
+// mapping each letter to a Unicode regional indicator symbol. Not used for
+// display any more (Windows' fonts don't render flag emoji at all — they
+// fall back to showing the two raw regional-indicator letters, which look
+// just like plain text), kept for anywhere the emoji form is still useful
+// (window/tab titles, log lines, etc.).
 func countryFlag(code string) string {
 	if len(code) != 2 {
 		return ""
@@ -224,4 +228,20 @@ func countryFlag(code string) string {
 		return ""
 	}
 	return string(rune(0x1F1E6+int(a-'A'))) + string(rune(0x1F1E6+int(b-'A')))
+}
+
+// flagImageURL returns a Twemoji SVG flag image URL for a 2-letter ISO
+// country code — rendered as a real <img>, this shows correctly on every
+// OS/browser (including Windows, which has no flag glyphs in its emoji
+// font at all, unlike the Unicode emoji character itself).
+func flagImageURL(code string) string {
+	if len(code) != 2 {
+		return ""
+	}
+	a, b := code[0], code[1]
+	if a < 'A' || a > 'Z' || b < 'A' || b > 'Z' {
+		return ""
+	}
+	return fmt.Sprintf("https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/%x-%x.svg",
+		0x1F1E6+int(a-'A'), 0x1F1E6+int(b-'A'))
 }
