@@ -8,7 +8,12 @@ import (
 	"strings"
 )
 
-const extraConfigPath = "/opt/psi-panel/panel/extra-config.json"
+// Lives under data/, not panel/: panel/ is root-owned so root-run commands
+// (the installer, sudo'd scripts) can't be tricked into trusting something
+// the unprivileged panel process wrote — see install.sh's
+// fix_prefix_ownership for the full reasoning. data/ is where the panel
+// legitimately writes at runtime.
+const extraConfigPath = "/opt/psi-panel/data/extra-config.json"
 
 // psiphonCreds holds the user-supplied Psiphon config, applied to every new
 // location. It's a raw JSON object pasted in from the user's own legitimate
