@@ -57,8 +57,8 @@
           <td class="mono">{{.Region}}</td>
           <td class="mono">127.0.0.1:{{.SocksPort}}</td>
           <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
-          <td class="mono">
-            {{if .ExitRegion}}{{.ExitRegionFlag}} {{.ExitRegion}}{{else if eq .Status "active"}}<span class="note">checking…</span>{{else}}<span class="note">—</span>{{end}}
+          <td style="font-size:1.15rem" title="{{.ExitRegion}}">
+            {{if .ExitRegionFlag}}{{.ExitRegionFlag}}{{else if eq .Status "active"}}<span class="note" style="font-size:0.85rem">…</span>{{else}}<span class="note" style="font-size:0.85rem">—</span>{{end}}
           </td>
           <td>
             <div class="actions">
