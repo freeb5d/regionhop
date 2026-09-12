@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Settings — Psiphon Panel</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0f1115;color:#e6e6e6;margin:0;padding:2rem}
+a{color:#93c5fd;text-decoration:none}
+.card{background:#181b21;padding:1.2rem;border-radius:10px;max-width:520px}
+label{display:block;margin:.8rem 0 .3rem;font-size:.85rem;color:#9aa0a6}
+input{width:100%;padding:.6rem;border-radius:6px;border:1px solid #333;background:#0f1115;color:#eee;box-sizing:border-box}
+button{margin-top:1.2rem;padding:.6rem 1.2rem;border:0;border-radius:6px;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer}
+.note{color:#9aa0a6;font-size:.85rem;margin-top:1rem;line-height:1.4}
+.ok{color:#86efac;margin-bottom:.5rem}
+</style></head>
+<body>
+<p><a href="/">&larr; back to dashboard</a></p>
+<div class="card">
+  <h1 style="margin-top:0;font-size:1.1rem">Psiphon credentials</h1>
+  {{if .Saved}}<div class="ok">Saved.</div>{{end}}
+  <form method="post" action="/settings">
+    <label for="pcid">PropagationChannelId</label>
+    <input id="pcid" type="text" name="propagation_channel_id" value="{{.PropagationChannelID}}" autocomplete="off">
+    <label for="sid">SponsorId</label>
+    <input id="sid" type="text" name="sponsor_id" value="{{.SponsorID}}" autocomplete="off">
+    <button type="submit">Save</button>
+  </form>
+  <div class="note">
+    These are applied to every new location you add from now on. They are not
+    retroactively rewritten into already-existing location configs — remove and
+    re-add a location (or edit /opt/psi-panel/configs/&lt;name&gt;.json directly)
+    to update it.
+  </div>
+</div>
+</body></html>

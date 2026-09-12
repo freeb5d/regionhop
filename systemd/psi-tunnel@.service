@@ -1,0 +1,20 @@
+[Unit]
+Description=Psiphon tunnel instance for location %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/psi-panel/core/ConsoleClient -config /opt/psi-panel/configs/%i.json
+Restart=on-failure
+RestartSec=5
+User=psipanel
+Group=psipanel
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/psi-panel/data/%i
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
