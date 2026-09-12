@@ -50,38 +50,43 @@ ensure_user() {
   # psi-tunnel@<name>` for the Logs page — without this, journalctl refuses
   # with "No journal files were opened due to insufficient permissions."
   usermod -aG systemd-journal "$SERVICE_USER"
-  setup_polkit
+  setup_sudo_control
 }
 
-setup_polkit() {
-  # The panel runs `systemctl start/stop/restart/enable/disable` as the
-  # unprivileged psipanel user (NoNewPrivileges=true in its unit, so sudo/
-  # setuid can't be used to escalate). Grant it permission via polkit,
-  # scoped to only the units it's meant to control — everything else on the
-  # box stays out of its reach.
-  if ! command -v pkaction &>/dev/null && ! dpkg -s policykit-1 &>/dev/null 2>&1; then
-    apt-get install -y --no-install-recommends policykit-1 || true
-  fi
-  mkdir -p /etc/polkit-1/rules.d
-  cat > /etc/polkit-1/rules.d/49-regionhop.rules <<'EOF'
-polkit.addRule(function(action, subject) {
-    // start/stop/restart need manage-units; enable/disable (used by the
-    // panel's --now flag) need manage-unit-files — grant both, scoped to
-    // exactly the units the panel is meant to control.
-    var scoped = (action.id == "org.freedesktop.systemd1.manage-units" ||
-                  action.id == "org.freedesktop.systemd1.manage-unit-files") &&
-                 subject.user == "psipanel";
-    if (!scoped) {
-        return polkit.Result.NOT_HANDLED;
-    }
-    var unit = action.lookup("unit");
-    if (unit && (/^psi-tunnel@.*\.service$/.test(unit) || unit == "psi-panel.service")) {
-        return polkit.Result.YES;
-    }
-    return polkit.Result.NOT_HANDLED;
-});
+setup_sudo_control() {
+  # The panel runs `sudo -n systemctl {enable --now|disable --now|restart}`
+  # as the unprivileged psipanel user to manage tunnel units — grant that via
+  # a narrowly-scoped NOPASSWD sudoers rule instead of polkit: polkit's JS
+  # rules.d format and default authorization behavior differ enough across
+  # systemd/polkit versions that a rule which works on one server silently
+  # no-ops on another ("Interactive authentication required."); sudoers'
+  # command-matching semantics are stable everywhere.
+  local systemctl_path
+  systemctl_path=$(command -v systemctl)
+
+  # Remove a stale polkit rule from earlier regionhop versions, if present.
+  rm -f /etc/polkit-1/rules.d/49-regionhop.rules
+
+  local sudoers_file=/etc/sudoers.d/regionhop-psipanel
+  local tmp
+  tmp=$(mktemp)
+  cat > "$tmp" <<EOF
+# Managed by regionhop's install.sh — do not edit by hand, it is
+# regenerated on every install/update. Scoped to exactly the operations
+# the panel needs on exactly the units it's meant to control.
+Cmnd_Alias REGIONHOP_TUNNEL_ENABLE = $systemctl_path enable --now psi-tunnel@*
+Cmnd_Alias REGIONHOP_TUNNEL_DISABLE = $systemctl_path disable --now psi-tunnel@*
+Cmnd_Alias REGIONHOP_TUNNEL_RESTART = $systemctl_path restart psi-tunnel@*
+Cmnd_Alias REGIONHOP_PANEL_RESTART = $systemctl_path restart psi-panel
+$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART
 EOF
-  systemctl try-restart polkit 2>/dev/null || systemctl try-restart polkitd 2>/dev/null || true
+  if visudo -c -f "$tmp" &>/dev/null; then
+    install -m 0440 -o root -g root "$tmp" "$sudoers_file"
+  else
+    echo "WARNING: generated sudoers rule failed validation, not installing it. Panel start/stop/restart will not work until this is fixed." >&2
+    visudo -c -f "$tmp" >&2 || true
+  fi
+  rm -f "$tmp"
 }
 
 ensure_dirs() {
@@ -106,7 +111,7 @@ ensure_go() {
 
 install_packages() {
   apt-get update -y
-  apt-get install -y --no-install-recommends git curl ca-certificates ufw policykit-1
+  apt-get install -y --no-install-recommends git curl ca-certificates ufw sudo
 }
 
 build_core() {
@@ -337,6 +342,7 @@ uninstall_all() {
   done
   rm -f /etc/systemd/system/psi-panel.service /etc/systemd/system/psi-tunnel@.service
   systemctl daemon-reload
+  rm -f /etc/sudoers.d/regionhop-psipanel /etc/polkit-1/rules.d/49-regionhop.rules
   rm -rf "$PREFIX" /usr/local/bin/psictl
   userdel "$SERVICE_USER" 2>/dev/null || true
   echo "Removed."
