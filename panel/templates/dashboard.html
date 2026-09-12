@@ -1,84 +1,90 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>regionhop</title>
+{{if .Font}}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{.Font}}:wght@400;500;600;700&display=swap">{{end}}
 <link rel="stylesheet" href="{{url "/static/style.css"}}">
+{{if .Font}}<style>body{font-family:"{{.Font}}",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}</style>{{end}}
 </head>
 <body>
 <div class="page">
   <div class="topbar">
     <div class="brand"><div class="brand-mark">R</div>regionhop</div>
     <div class="nav-actions">
-      <a class="btn btn-ghost btn-sm" href="{{url "/settings"}}">Credentials</a>
-      <form class="inline" method="post" action="{{url "/logout"}}"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
+      <select class="lang-switch" onchange="location.search='?lang='+this.value">
+        {{$cur := .Lang}}{{range langs}}<option value="{{.Code}}" {{if eq .Code $cur}}selected{{end}}>{{.Native}}</option>{{end}}
+      </select>
+      <a class="btn btn-ghost btn-sm" href="{{url "/settings"}}">{{t .Lang "nav.credentials"}}</a>
+      <form class="inline" method="post" action="{{url "/logout"}}"><button class="btn-ghost btn-sm" type="submit">{{t .Lang "nav.logout"}}</button></form>
     </div>
   </div>
 
   <div class="main">
     {{if .UpdateAvailable}}
     <div class="alert alert-update" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-      <span>Update available: <strong>v{{.LatestVersion}}</strong> (running v{{.CurrentVersion}}).</span>
-      <form class="inline" method="post" action="{{url "/update"}}" onsubmit="return confirm('Update regionhop now? The panel will restart automatically.');">
-        <button type="submit" class="btn-sm">Update now</button>
+      <span>{{tHTML .Lang "update.available" .LatestVersion .CurrentVersion}}</span>
+      <form class="inline" method="post" action="{{url "/update"}}" onsubmit="return confirm({{tf .Lang "update.confirm"}});">
+        <button type="submit" class="btn-sm">{{t .Lang "update.now"}}</button>
       </form>
     </div>
     {{end}}
     <div class="page-header">
-      <h1>Tunnels</h1>
-      <div class="desc">Each location runs its own Psiphon tunnel instance. SOCKS proxies are bound to 127.0.0.1 on this server only — never reachable from outside.</div>
+      <h1>{{t .Lang "tunnels.title"}}</h1>
+      <div class="desc">{{t .Lang "tunnels.desc"}}</div>
     </div>
 
     <div class="card">
-      <h2>Add location</h2>
+      <h2>{{t .Lang "add.title"}}</h2>
       <form method="post" action="{{url "/tunnels/add"}}">
         <div class="inline-form">
           <div class="field">
-            <label for="name">Name</label>
-            <input id="name" type="text" name="name" placeholder="e.g. de-1" required pattern="[a-z0-9][a-z0-9-]{1,30}">
+            <label for="name">{{t .Lang "add.name"}}</label>
+            <input id="name" type="text" name="name" placeholder="{{t .Lang "add.name.placeholder"}}" required pattern="[a-z0-9][a-z0-9-]{1,30}">
           </div>
           <div class="field">
-            <label for="region">Region</label>
+            <label for="region">{{t .Lang "add.region"}}</label>
             <select id="region" name="region">
               {{range .Regions}}<option value="{{.Code}}">{{.Label}}</option>{{end}}
             </select>
           </div>
-          <button type="submit">Add + start</button>
+          <button type="submit">{{t .Lang "add.submit"}}</button>
         </div>
       </form>
-      <div class="card-sub">Port is assigned automatically from the internal range and is always bound to loopback.</div>
+      <div class="card-sub">{{t .Lang "add.note"}}</div>
     </div>
 
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Name</th><th>Region</th><th>SOCKS</th><th>Status</th><th>Flag</th><th>Actions</th></tr>
+          <tr><th>{{t .Lang "table.name"}}</th><th>{{t .Lang "table.region"}}</th><th>{{t .Lang "table.socks"}}</th><th>{{t .Lang "table.status"}}</th><th>{{t .Lang "table.flag"}}</th><th>{{t .Lang "table.actions"}}</th></tr>
         </thead>
         <tbody>
+        {{$lang := .Lang}}
         {{range .Tunnels}}
         <tr data-tunnel="{{.Name}}">
           <td>{{.Name}}</td>
           <td class="mono">{{.Region}}</td>
           <td class="mono">127.0.0.1:{{.SocksPort}}</td>
-          <td><span class="badge {{.StatusClass}}" data-role="status">{{.Status}}</span></td>
+          <td><span class="badge {{.StatusClass}}" data-role="status" data-status="{{.Status}}">{{t $lang (printf "status.%s" .Status)}}</span></td>
           <td title="{{.ExitRegion}}" data-role="exit">
             {{if .ExitFlagURL}}<img src="{{.ExitFlagURL}}" alt="{{.ExitRegion}}" width="20" height="15" style="vertical-align:middle;border-radius:2px">{{else if eq .Status "active"}}<span class="note">…</span>{{else}}<span class="note">—</span>{{end}}
           </td>
           <td>
             <div class="actions">
-              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">Restart</button></form>
-              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">Stop</button></form>
-              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/remove" onsubmit="return confirm('Remove {{.Name}}?');"><button class="btn-danger btn-sm" type="submit">Remove</button></form>
-              <a class="btn btn-ghost btn-sm" href="{{url "/tunnels/"}}{{.Name}}/logs">Logs</a>
+              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">{{t $lang "action.restart"}}</button></form>
+              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">{{t $lang "action.stop"}}</button></form>
+              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/remove" onsubmit="return confirm({{tf $lang "action.remove.confirm" .Name}});"><button class="btn-danger btn-sm" type="submit">{{t $lang "action.remove"}}</button></form>
+              <a class="btn btn-ghost btn-sm" href="{{url "/tunnels/"}}{{.Name}}/logs">{{t $lang "action.logs"}}</a>
             </div>
           </td>
         </tr>
         {{else}}
-        <tr class="empty-row"><td colspan="6">No locations yet — add one above to get started.</td></tr>
+        <tr class="empty-row"><td colspan="6">{{t .Lang "table.empty"}}</td></tr>
         {{end}}
         </tbody>
       </table>
     </div>
     <div class="note" style="margin-top:1rem">
-      regionhop v{{.CurrentVersion}} — made with ❤️ by kaveh
+      regionhop v{{.CurrentVersion}} — {{t .Lang "footer.credit"}}
     </div>
   </div>
 </div>
@@ -87,7 +93,13 @@
 // so a connecting -> active transition (or any status change) shows up
 // without the user having to reload the page.
 (function () {
-  var STATUS_LABEL = { active: "active", connecting: "connecting", inactive: "inactive", failed: "failed" };
+  var STATUS_LABEL = {
+    active: {{t .Lang "status.active"}},
+    connecting: {{t .Lang "status.connecting"}},
+    inactive: {{t .Lang "status.inactive"}},
+    failed: {{t .Lang "status.failed"}},
+    unknown: {{t .Lang "status.unknown"}}
+  };
 
   function applyUpdate(row) {
     var tr = document.querySelector('tr[data-tunnel="' + CSS.escape(row.Name) + '"]');
@@ -96,7 +108,8 @@
     var statusEl = tr.querySelector('[data-role="status"]');
     if (statusEl) {
       statusEl.className = "badge " + row.StatusClass;
-      statusEl.textContent = row.Status;
+      statusEl.setAttribute("data-status", row.Status);
+      statusEl.textContent = STATUS_LABEL[row.Status] || row.Status;
     }
 
     var exitEl = tr.querySelector('[data-role="exit"]');

@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -32,7 +33,17 @@ var basePath string
 // every link, form action, and JS fetch target goes through this.
 func urlFor(path string) string { return basePath + path }
 
-var tmpl = template.Must(template.New("").Funcs(template.FuncMap{"url": urlFor}).ParseFS(templateFS, "templates/*.html"))
+var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
+	"url": urlFor,
+	"t":   t,
+	"tf": func(lang, key string, args ...any) string {
+		return fmt.Sprintf(t(lang, key), args...)
+	},
+	"tHTML": func(lang, key string, args ...any) template.HTML {
+		return template.HTML(fmt.Sprintf(t(lang, key), args...))
+	},
+	"langs": func() []langInfo { return supportedLangs },
+}).ParseFS(templateFS, "templates/*.html"))
 
 const (
 	registryPath = "/opt/psi-panel/data/tunnels.json"
@@ -117,20 +128,42 @@ func (a *app) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// langData returns the fields every page-rendering template needs for
+// language selection: the active code, text direction, the (optional)
+// Google Fonts family for it, and the list of languages for the switcher.
+func langData(r *http.Request) map[string]any {
+	lang := currentLang(r)
+	info := langInfoFor(lang)
+	dir := "ltr"
+	if info.RTL {
+		dir = "rtl"
+	}
+	return map[string]any{"Lang": lang, "Dir": dir, "Font": info.Font, "Langs": supportedLangs}
+}
+
+func withLang(r *http.Request, extra map[string]any) map[string]any {
+	data := langData(r)
+	for k, v := range extra {
+		data[k] = v
+	}
+	return data
+}
+
 func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
+	setLangCookie(w, r)
 	if r.Method == http.MethodGet {
-		tmpl.ExecuteTemplate(w, "login.html", map[string]any{})
+		tmpl.ExecuteTemplate(w, "login.html", withLang(r, nil))
 		return
 	}
 	ip := clientIP(r)
 	if !a.sessions.allowAttempt(ip) {
-		tmpl.ExecuteTemplate(w, "login.html", map[string]any{"Error": "Too many attempts, try again later."})
+		tmpl.ExecuteTemplate(w, "login.html", withLang(r, map[string]any{"Error": t(currentLang(r), "login.error.locked")}))
 		return
 	}
 	pw := r.FormValue("password")
 	if !checkPassword(a.adminHash, pw) {
 		a.sessions.recordFailure(ip)
-		tmpl.ExecuteTemplate(w, "login.html", map[string]any{"Error": "Incorrect password."})
+		tmpl.ExecuteTemplate(w, "login.html", withLang(r, map[string]any{"Error": t(currentLang(r), "login.error.wrong")}))
 		return
 	}
 	a.sessions.recordSuccess(ip)
@@ -191,6 +224,7 @@ func (a *app) buildRows() ([]row, error) {
 }
 
 func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	setLangCookie(w, r)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -207,13 +241,13 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(regions, func(i, j int) bool { return regions[i].Label < regions[j].Label })
 
 	latest, available, _, _ := updates.snapshot()
-	tmpl.ExecuteTemplate(w, "dashboard.html", map[string]any{
+	tmpl.ExecuteTemplate(w, "dashboard.html", withLang(r, map[string]any{
 		"Tunnels":         rows,
 		"Regions":         regions,
 		"CurrentVersion":  CurrentVersion,
 		"LatestVersion":   latest,
 		"UpdateAvailable": available,
-	})
+	}))
 }
 
 // handleUpdateTrigger starts the self-update script (via the narrowly
@@ -230,7 +264,7 @@ func (a *app) handleUpdateTrigger(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to start update: "+err.Error(), 500)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "updating.html", nil)
+	tmpl.ExecuteTemplate(w, "updating.html", withLang(r, nil))
 }
 
 // handleTunnelsStatus is a lightweight JSON polling endpoint the dashboard
@@ -326,6 +360,7 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
+	setLangCookie(w, r)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -333,7 +368,7 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 		cfgJSON := r.FormValue("config_json")
 
 		if err := validateExtraConfigJSON(cfgJSON); err != nil {
-			tmpl.ExecuteTemplate(w, "settings.html", credsTemplateData(psiphonCreds{ConfigJSON: cfgJSON}, false, err.Error()))
+			tmpl.ExecuteTemplate(w, "settings.html", withLang(r, credsTemplateData(psiphonCreds{ConfigJSON: cfgJSON}, false, err.Error())))
 			return
 		}
 		if err := saveExtraConfigJSON(cfgJSON); err != nil {
@@ -341,11 +376,11 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.creds = psiphonCreds{ConfigJSON: cfgJSON}
-		tmpl.ExecuteTemplate(w, "settings.html", credsTemplateData(a.creds, true, ""))
+		tmpl.ExecuteTemplate(w, "settings.html", withLang(r, credsTemplateData(a.creds, true, "")))
 		return
 	}
 
-	tmpl.ExecuteTemplate(w, "settings.html", credsTemplateData(a.creds, false, ""))
+	tmpl.ExecuteTemplate(w, "settings.html", withLang(r, credsTemplateData(a.creds, false, "")))
 }
 
 func credsTemplateData(c psiphonCreds, saved bool, errMsg string) map[string]any {
@@ -356,9 +391,14 @@ func credsTemplateData(c psiphonCreds, saved bool, errMsg string) map[string]any
 	}
 }
 
-// /tunnels/<name>/<action>
+// /tunnels/<name>/<action> (under basePath, which must be stripped first —
+// mux.HandleFunc doesn't strip a registered prefix from r.URL.Path the way
+// http.StripPrefix-wrapped handlers do, so without this every request here
+// carried an extra leading segment whenever PANEL_PATH_PREFIX was set,
+// throwing off this exact-3-parts split entirely).
 func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	trimmed := strings.TrimPrefix(r.URL.Path, basePath)
+	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
 	if len(parts) != 3 {
 		http.NotFound(w, r)
 		return
@@ -372,7 +412,7 @@ func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "logs":
 		out, _ := tunnelLogs(name, 200)
-		tmpl.ExecuteTemplate(w, "logs.html", map[string]any{"Name": name, "Logs": out})
+		tmpl.ExecuteTemplate(w, "logs.html", withLang(r, map[string]any{"Name": name, "Logs": out}))
 		return
 	case "restart":
 		if r.Method != http.MethodPost {
