@@ -116,7 +116,7 @@ type psiphonNotice struct {
 	NoticeType string `json:"noticeType"`
 	Data       struct {
 		Count  int    `json:"count"`
-		Region string `json:"region"`
+		Region string `json:"serverRegion"`
 	} `json:"data"`
 }
 
@@ -133,53 +133,84 @@ type tunnelInfo struct {
 // "connecting" while ConsoleClient is still establishing a tunnel,
 // "active" only once it's actually reported a connected tunnel, and
 // systemd's own state (inactive/failed/activating/...) when the unit isn't
-// running at all. Both are read from a single backward scan of recent
-// journal output: psiphon-tunnel-core emits
-// {"noticeType":"Tunnels","data":{"count":N}} whenever its connected-tunnel
-// count changes, and {"noticeType":"ConnectedServerRegion","data":{"region":"XX"}}
-// once it lands on a server.
+// running at all.
+//
+// Connection state comes from a backward scan of a small recent journal
+// window: psiphon-tunnel-core emits {"noticeType":"Tunnels","data":
+// {"count":N}} every time its connected-tunnel count changes, so the most
+// recent one is always fresh. The exit region comes from a separate,
+// full-history `journalctl --grep` lookup instead of that same small
+// window: {"noticeType":"ConnectedServerRegion","data":
+// {"serverRegion":"XX"}} is emitted exactly once right after connecting,
+// so on a long-running tunnel it can scroll out of a bounded recent-lines
+// window long before the tunnel itself disconnects.
 func tunnelStatusInfo(name string) tunnelInfo {
 	svcState := tunnelStatus(name)
 	if svcState != "active" {
 		return tunnelInfo{State: svcState}
 	}
 
-	out, err := tunnelLogs(name, 200)
+	out, err := tunnelLogs(name, 100)
 	if err != nil {
 		return tunnelInfo{State: "connecting"}
 	}
 
 	state := ""
-	region := ""
 	lines := strings.Split(out, "\n")
-	for i := len(lines) - 1; i >= 0 && (state == "" || region == ""); i-- {
-		idx := strings.IndexByte(lines[i], '{')
-		if idx < 0 {
+	for i := len(lines) - 1; i >= 0 && state == ""; i-- {
+		n, ok := parseNoticeLine(lines[i])
+		if !ok || n.NoticeType != "Tunnels" {
 			continue
 		}
-		var n psiphonNotice
-		if err := json.Unmarshal([]byte(lines[i][idx:]), &n); err != nil {
-			continue
-		}
-		switch n.NoticeType {
-		case "Tunnels":
-			if state == "" {
-				if n.Data.Count > 0 {
-					state = "active"
-				} else {
-					state = "connecting"
-				}
-			}
-		case "ConnectedServerRegion":
-			if region == "" {
-				region = n.Data.Region
-			}
+		if n.Data.Count > 0 {
+			state = "active"
+		} else {
+			state = "connecting"
 		}
 	}
 	if state == "" {
 		state = "connecting"
 	}
-	return tunnelInfo{State: state, Region: region}
+
+	return tunnelInfo{State: state, Region: connectedServerRegion(name)}
+}
+
+func parseNoticeLine(line string) (psiphonNotice, bool) {
+	idx := strings.IndexByte(line, '{')
+	if idx < 0 {
+		return psiphonNotice{}, false
+	}
+	var n psiphonNotice
+	if err := json.Unmarshal([]byte(line[idx:]), &n); err != nil {
+		return psiphonNotice{}, false
+	}
+	return n, true
+}
+
+// connectedServerRegion searches the whole journal for this unit for its
+// (single, one-time-per-connection) ConnectedServerRegion notice, returning
+// the most recent one. Uses journalctl's own indexed --grep instead of
+// pulling N lines client-side, so it stays cheap and correct no matter how
+// long the tunnel has been running or how noisy its log is.
+func connectedServerRegion(name string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "journalctl",
+		"-u", unitName(name),
+		"--grep", `"noticeType":"ConnectedServerRegion"`,
+		"-n", "5", "--no-pager")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		n, ok := parseNoticeLine(lines[i])
+		if ok && n.NoticeType == "ConnectedServerRegion" && n.Data.Region != "" {
+			return n.Data.Region
+		}
+	}
+	return ""
 }
 
 // countryFlag turns a 2-letter ISO country code into its flag emoji by
