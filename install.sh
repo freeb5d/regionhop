@@ -51,6 +51,7 @@ ensure_user() {
   # with "No journal files were opened due to insufficient permissions."
   usermod -aG systemd-journal "$SERVICE_USER"
   setup_sudo_control
+  ensure_path_prefix
 }
 
 setup_sudo_control() {
@@ -246,20 +247,45 @@ set_env_var() {
   chown "$SERVICE_USER:$SERVICE_USER" "$PANEL_ENV"
 }
 
+random_path_prefix() {
+  # A random path the panel is served under (e.g. /a1b2c3d4e5f6) so a port
+  # scanner that finds the listening port still can't reach the login page
+  # without also guessing this — on top of, not instead of, the actual auth.
+  echo "/$(head -c 8 /dev/urandom | xxd -p -c 8)"
+}
+
 first_time_panel_setup() {
   [[ -f "$PANEL_ENV" ]] && return
-  local port secret
+  local port secret path_prefix
   port=$(random_port)
   secret=$(head -c 32 /dev/urandom | xxd -p -c 32)
+  path_prefix=$(random_path_prefix)
   set_env_var PANEL_LISTEN "0.0.0.0:$port"
   set_env_var PANEL_SESSION_SECRET "$secret"
+  set_env_var PANEL_PATH_PREFIX "$path_prefix"
   echo
   echo "Panel will listen on port $port (all interfaces) — set an admin password now."
   set_panel_password
   echo
   echo "=== Save this ==="
-  echo "Panel URL:  http://$(server_ip):$port/"
+  echo "Panel URL:  http://$(server_ip):$port$path_prefix/"
   echo "================="
+}
+
+# Idempotent retrofit for installs from before PANEL_PATH_PREFIX existed:
+# adds one if panel.env is present but doesn't have it yet, so `psictl
+# update` picks this up on existing servers too, the same way the journal
+# group and sudoers rule retrofits work.
+ensure_path_prefix() {
+  [[ -f "$PANEL_ENV" ]] || return 0
+  grep -q '^PANEL_PATH_PREFIX=' "$PANEL_ENV" 2>/dev/null && return 0
+  local path_prefix
+  path_prefix=$(random_path_prefix)
+  set_env_var PANEL_PATH_PREFIX "$path_prefix"
+  local port
+  port=$(sed -n 's/^PANEL_LISTEN=.*://p' "$PANEL_ENV")
+  echo "Added a random path prefix to the panel URL: $path_prefix"
+  echo "Your panel is now at: http://$(server_ip):${port}${path_prefix}/"
 }
 
 server_ip() {

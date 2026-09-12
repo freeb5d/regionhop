@@ -1,15 +1,15 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Credentials — regionhop</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="{{url "/static/style.css"}}">
 </head>
 <body>
 <div class="page">
   <div class="topbar">
     <div class="brand"><div class="brand-mark">R</div>regionhop</div>
     <div class="nav-actions">
-      <a class="btn btn-ghost btn-sm" href="/">Dashboard</a>
-      <form class="inline" method="post" action="/logout"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
+      <a class="btn btn-ghost btn-sm" href="{{url "/"}}">Dashboard</a>
+      <form class="inline" method="post" action="{{url "/logout"}}"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
     </div>
   </div>
 
@@ -22,7 +22,7 @@
     <div class="card">
       {{if .Saved}}<div class="alert alert-success">Saved.</div>{{end}}
       {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
-      <form method="post" action="/settings">
+      <form method="post" action="{{url "/settings"}}">
         <div class="field">
           <label for="cfg">Config JSON</label>
           <textarea id="cfg" name="config_json" autocomplete="off" rows="14" placeholder='{

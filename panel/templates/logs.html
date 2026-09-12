@@ -1,19 +1,19 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Logs · {{.Name}} — regionhop</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="{{url "/static/style.css"}}">
 </head>
 <body>
 <div class="page">
   <div class="topbar">
     <div class="brand"><div class="brand-mark">R</div>regionhop</div>
     <div class="nav-actions">
-      <a class="btn btn-ghost btn-sm" href="/">Dashboard</a>
+      <a class="btn btn-ghost btn-sm" href="{{url "/"}}">Dashboard</a>
     </div>
   </div>
 
   <div class="main">
-    <div class="breadcrumb"><a href="/">Tunnels</a> / {{.Name}}</div>
+    <div class="breadcrumb"><a href="{{url "/"}}">Tunnels</a> / {{.Name}}</div>
     <div class="page-header">
       <h1>Logs: {{.Name}}</h1>
       <div class="desc">Last 200 journal lines for this location's service.</div>

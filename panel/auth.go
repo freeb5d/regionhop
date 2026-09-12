@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -136,11 +137,17 @@ func checkPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
+// clientIP deliberately does NOT trust X-Forwarded-For: the panel listens
+// directly on the network (no reverse proxy in front of it by default), so
+// that header is entirely attacker-controlled. Trusting it let anyone
+// bypass the login lockout completely by sending a different spoofed value
+// on every attempt — r.RemoteAddr is the one thing a client can't fake.
 func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		return strings.TrimSpace(strings.Split(ip, ",")[0])
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
 	}
-	return r.RemoteAddr
+	return host
 }
 
 func formatSessionValue(exp int64) string {
