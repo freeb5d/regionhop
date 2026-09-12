@@ -119,15 +119,12 @@ panel. It does **not** touch the already-built `ConsoleClient` — use
 **Rebuild core only** from the installer menu if you also want to rebuild
 the Psiphon core against its latest upstream source.
 
-## Exit IP / country
+## Exit region
 
-Once a location shows **active**, the dashboard's Exit column shows the exit
-IP, country, and flag it's actually tunneling through. This works by making
-one HTTPS request *through that location's own SOCKS proxy* to
-[ipapi.co](https://ipapi.co) (a third-party geolocation API, not affiliated
-with regionhop or Psiphon), cached for 5 minutes per location and refreshed
-lazily on dashboard load. If you'd rather this not make outbound requests to
-a third party, say so and it can be made opt-out.
+Once a location shows **active**, the dashboard's Exit column shows the
+Psiphon server region it actually landed on, with a flag. This comes from
+`psiphon-tunnel-core`'s own `ConnectedServerRegion` notice in the journal —
+no outbound requests, no third-party service involved.
 
 ## Security model
 

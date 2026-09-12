@@ -124,14 +124,13 @@ type regionOpt struct {
 }
 
 type row struct {
-	Name        string
-	Region      string
-	SocksPort   int
-	Status      string
-	StatusClass string
-	ExitIP      string
-	ExitCountry string
-	ExitFlag    string
+	Name           string
+	Region         string
+	SocksPort      int
+	Status         string
+	StatusClass    string
+	ExitRegion     string
+	ExitRegionFlag string
 }
 
 func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -147,9 +146,9 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	rows := make([]row, 0, len(list))
 	for _, t := range list {
-		st := tunnelConnectionState(t.Name)
+		info := tunnelStatusInfo(t.Name)
 		class := "unknown"
-		switch st {
+		switch info.State {
 		case "active":
 			class = "active"
 		case "connecting":
@@ -157,11 +156,10 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		case "inactive", "failed":
 			class = "inactive"
 		}
-		info := exitInfoFor(t.Name, t.SocksPort, st == "active")
 		rows = append(rows, row{
 			Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort,
-			Status: st, StatusClass: class,
-			ExitIP: info.IP, ExitCountry: info.Country, ExitFlag: countryFlag(info.CountryCode),
+			Status: info.State, StatusClass: class,
+			ExitRegion: exitRegionLabel(info.Region), ExitRegionFlag: countryFlag(info.Region),
 		})
 	}
 
@@ -179,6 +177,21 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"LatestVersion":   latest,
 		"UpdateAvailable": available,
 	})
+}
+
+// exitRegionLabel formats a connected server's region code for display —
+// unlike regionLabel (which is for the Any/preference dropdown), an unknown
+// code here is shown as-is rather than falling back to "Any", since Psiphon
+// can connect through more regions than are in our curated egress-region
+// dropdown list.
+func exitRegionLabel(code string) string {
+	if code == "" {
+		return ""
+	}
+	if l, ok := regionCodes[code]; ok {
+		return code + " - " + l
+	}
+	return code
 }
 
 func regionLabel(code string) string {
@@ -243,7 +256,6 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// credsFormFields maps each psiphonCreds field to its HTML form name and the
 func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
