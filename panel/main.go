@@ -144,11 +144,13 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	rows := make([]row, 0, len(list))
 	for _, t := range list {
-		st := tunnelStatus(t.Name)
+		st := tunnelConnectionState(t.Name)
 		class := "unknown"
 		switch st {
 		case "active":
 			class = "active"
+		case "connecting":
+			class = "connecting"
 		case "inactive", "failed":
 			class = "inactive"
 		}

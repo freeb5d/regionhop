@@ -295,8 +295,15 @@ tr:last-child td { border-bottom: none; }
   background: currentColor;
 }
 .badge.active { background: var(--success-soft); color: var(--success); }
+.badge.connecting { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+.badge.connecting::before { animation: badge-pulse 1.2s ease-in-out infinite; }
 .badge.inactive { background: var(--danger-soft); color: var(--danger); }
 .badge.unknown { background: var(--border-soft); color: var(--text-faint); }
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 
 /* Alerts */
 .alert {
