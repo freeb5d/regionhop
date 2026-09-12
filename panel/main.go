@@ -128,13 +128,13 @@ type regionOpt struct {
 }
 
 type row struct {
-	Name           string
-	Region         string
-	SocksPort      int
-	Status         string
-	StatusClass    string
-	ExitRegion     string
-	ExitRegionFlag string
+	Name        string
+	Region      string
+	SocksPort   int
+	Status      string
+	StatusClass string
+	ExitRegion  string
+	ExitFlagURL string
 }
 
 // buildRows computes each location's live status/exit info. Called both for
@@ -163,7 +163,7 @@ func (a *app) buildRows() ([]row, error) {
 		rows = append(rows, row{
 			Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort,
 			Status: info.State, StatusClass: class,
-			ExitRegion: exitRegionLabel(info.Region), ExitRegionFlag: countryFlag(info.Region),
+			ExitRegion: exitRegionLabel(info.Region), ExitFlagURL: flagImageURL(info.Region),
 		})
 	}
 	return rows, nil
