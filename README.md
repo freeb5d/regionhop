@@ -35,13 +35,21 @@ sudo bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/
 ```
 
 This opens an interactive menu. For a first run, pick **1) Full setup** — it
-installs Go, builds `psiphon-tunnel-core`'s `ConsoleClient` and the panel,
-installs the systemd units, adds a firewall rule blocking external access to
-the SOCKS port range, and walks you through setting the panel's admin
-password. It prints the panel's URL at the end.
+installs Go, downloads the prebuilt panel binary from the
+[latest release](https://github.com/freeb5d/regionhop/releases/latest) (falls
+back to building it from source if that's ever unavailable), builds
+`psiphon-tunnel-core`'s `ConsoleClient` from source, installs the systemd
+units, adds a firewall rule blocking external access to the SOCKS port range,
+and walks you through setting the panel's admin password. It prints the
+panel's URL at the end.
 
 You can re-run the same command any time to reopen the menu (rebuild the
 core, rotate the password, check status, uninstall, etc.) — it's idempotent.
+
+> The panel ships as a prebuilt `linux/amd64` binary in each release, so
+> installing it is just a download. `ConsoleClient` (Psiphon's own tunnel
+> core) is a much larger codebase and is always built from source on your
+> server during install/update.
 
 ## Before you add a location
 
@@ -83,7 +91,29 @@ psictl restart de-1
 psictl logs de-1            # last 200 journal lines
 psictl panel-restart
 psictl panel-logs
+psictl check-update    # compare installed vs. latest GitHub release
+psictl update           # update the panel to the latest release, restart it
 ```
+
+## Updating
+
+The dashboard shows a banner when a newer release is published. To update:
+
+```bash
+psictl update
+```
+
+or, without `psictl` installed:
+
+```bash
+sudo bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update
+```
+
+This fetches the latest release, updates the panel (from the prebuilt
+binary when available), reinstalls the systemd units, and restarts the
+panel. It does **not** touch the already-built `ConsoleClient` — use
+**Rebuild core only** from the installer menu if you also want to rebuild
+the Psiphon core against its latest upstream source.
 
 ## Security model
 

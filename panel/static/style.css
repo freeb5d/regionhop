@@ -298,6 +298,7 @@ tr:last-child td { border-bottom: none; }
 }
 .alert-error { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(248, 113, 113, 0.25); }
 .alert-success { background: var(--success-soft); color: var(--success); border: 1px solid rgba(52, 211, 153, 0.25); }
+.alert-update { background: var(--accent-soft); color: var(--accent-hover); border: 1px solid rgba(79, 124, 255, 0.3); }
 
 /* Login page */
 .login-shell {

@@ -1,3 +1,6 @@
 panel/psi-panel
+panel/psi-panel.exe
+panel/psi-panel.exe~
+panel/regionhop-panel-*
 panel/panel.env
 *.log
