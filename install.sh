@@ -50,6 +50,31 @@ ensure_user() {
   # psi-tunnel@<name>` for the Logs page — without this, journalctl refuses
   # with "No journal files were opened due to insufficient permissions."
   usermod -aG systemd-journal "$SERVICE_USER"
+  setup_polkit
+}
+
+setup_polkit() {
+  # The panel runs `systemctl start/stop/restart/enable/disable` as the
+  # unprivileged psipanel user (NoNewPrivileges=true in its unit, so sudo/
+  # setuid can't be used to escalate). Grant it permission via polkit,
+  # scoped to only the units it's meant to control — everything else on the
+  # box stays out of its reach.
+  if ! command -v pkaction &>/dev/null && ! dpkg -s policykit-1 &>/dev/null 2>&1; then
+    apt-get install -y --no-install-recommends policykit-1 || true
+  fi
+  mkdir -p /etc/polkit-1/rules.d
+  cat > /etc/polkit-1/rules.d/49-regionhop.rules <<'EOF'
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "psipanel") {
+        var unit = action.lookup("unit");
+        if (unit && (/^psi-tunnel@.*\.service$/.test(unit) || unit == "psi-panel.service")) {
+            return polkit.Result.YES;
+        }
+    }
+});
+EOF
+  systemctl try-restart polkit 2>/dev/null || systemctl try-restart polkitd 2>/dev/null || true
 }
 
 ensure_dirs() {
@@ -74,7 +99,7 @@ ensure_go() {
 
 install_packages() {
   apt-get update -y
-  apt-get install -y --no-install-recommends git curl ca-certificates ufw
+  apt-get install -y --no-install-recommends git curl ca-certificates ufw policykit-1
 }
 
 build_core() {
