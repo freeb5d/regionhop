@@ -22,19 +22,32 @@ func runSystemctl(args ...string) (string, error) {
 	return string(out), err
 }
 
+// wrapErr folds systemctl's own stderr/stdout into the returned error so
+// callers don't just see the useless "exit status 1" from os/exec.
+func wrapErr(out string, err error) error {
+	if err == nil {
+		return nil
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return err
+	}
+	return fmt.Errorf("%s", out)
+}
+
 func startTunnel(name string) error {
-	_, err := runSystemctl("enable", "--now", unitName(name))
-	return err
+	out, err := runSystemctl("enable", "--now", unitName(name))
+	return wrapErr(out, err)
 }
 
 func stopTunnel(name string) error {
-	_, err := runSystemctl("disable", "--now", unitName(name))
-	return err
+	out, err := runSystemctl("disable", "--now", unitName(name))
+	return wrapErr(out, err)
 }
 
 func restartTunnel(name string) error {
-	_, err := runSystemctl("restart", unitName(name))
-	return err
+	out, err := runSystemctl("restart", unitName(name))
+	return wrapErr(out, err)
 }
 
 func tunnelStatus(name string) string {
