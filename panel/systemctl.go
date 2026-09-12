@@ -56,7 +56,7 @@ const selfUpdateScript = "/opt/regionhop-admin/self-update.sh"
 // vanish along with this process) so a failure is diagnosable afterward via
 // `psictl panel-logs` or by reading the file directly.
 func triggerSelfUpdate() error {
-	logPath := "/opt/psi-panel/panel/update.log"
+	logPath := "/opt/psi-panel/data/update.log"
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err

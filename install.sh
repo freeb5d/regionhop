@@ -53,6 +53,7 @@ ensure_user() {
   usermod -aG systemd-journal "$SERVICE_USER"
   setup_sudo_control
   ensure_path_prefix
+  fix_prefix_ownership
 }
 
 setup_sudo_control() {
@@ -128,7 +129,41 @@ EOF
 
 ensure_dirs() {
   mkdir -p "$PREFIX"/{core,configs,data,panel}
-  chown -R "$SERVICE_USER:$SERVICE_USER" "$PREFIX"
+  fix_prefix_ownership
+}
+
+# Ownership model for everything under $PREFIX, and the retrofit path for
+# installs created before this scheme existed:
+#   $PREFIX, $PREFIX/core, $PREFIX/panel   root:root, 0755 — psipanel can
+#     read/execute (ConsoleClient, the psi-panel binary) but never write, so
+#     it can't replace either binary out from under a later `sudo` call or a
+#     root-run installer command (see set_panel_password below and the
+#     self-update.sh comment above — same bug class, this is the general
+#     form of that fix: nothing root directly executes, or a NOPASSWD sudo
+#     rule points at, may live in a directory the unprivileged panel process
+#     can write to).
+#   $PANEL_ENV                              root:root, 0600 — systemd reads
+#     EnvironmentFile= as root before dropping to User=psipanel, so the
+#     panel process itself never needs to read this file directly.
+#   $PREFIX/configs, $PREFIX/data           psipanel:psipanel — the running
+#     panel legitimately writes here at runtime (tunnel configs, the
+#     registry, your pasted Psiphon deployment config).
+fix_prefix_ownership() {
+  [[ -d "$PREFIX" ]] || return 0
+  chown root:root "$PREFIX" "$PREFIX/core" "$PREFIX/panel" 2>/dev/null || true
+  chmod 0755 "$PREFIX" "$PREFIX/core" "$PREFIX/panel" 2>/dev/null || true
+  [[ -f "$PREFIX/core/ConsoleClient" ]] && { chown root:root "$PREFIX/core/ConsoleClient"; chmod 0755 "$PREFIX/core/ConsoleClient"; }
+  [[ -f "$PREFIX/panel/psi-panel" ]] && { chown root:root "$PREFIX/panel/psi-panel"; chmod 0755 "$PREFIX/panel/psi-panel"; }
+  [[ -f "$PANEL_ENV" ]] && { chown root:root "$PANEL_ENV"; chmod 0600 "$PANEL_ENV"; }
+  mkdir -p "$PREFIX/configs" "$PREFIX/data"
+  chown -R "$SERVICE_USER:$SERVICE_USER" "$PREFIX/configs" "$PREFIX/data"
+  # Migrate extra-config.json out of the now-root-owned panel/ dir from
+  # earlier regionhop versions, into data/ where the panel can still write
+  # it at runtime.
+  if [[ -f "$PREFIX/panel/extra-config.json" ]]; then
+    mv -f "$PREFIX/panel/extra-config.json" "$PREFIX/data/extra-config.json"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/data/extra-config.json"
+  fi
 }
 
 ensure_go() {
@@ -157,7 +192,8 @@ build_core() {
   rm -rf "$build_dir"
   git clone --depth 1 https://github.com/psiphon-labs/psiphon-tunnel-core.git "$build_dir"
   (cd "$build_dir/ConsoleClient" && go build -o "$PREFIX/core/ConsoleClient" .)
-  chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/core/ConsoleClient"
+  chown root:root "$PREFIX/core/ConsoleClient"
+  chmod 0755 "$PREFIX/core/ConsoleClient"
   echo "Core built at $PREFIX/core/ConsoleClient"
   echo
   echo "NOTE: edit propagation/sponsor IDs via menu option 'Set Psiphon IDs' before adding locations."
@@ -189,9 +225,9 @@ download_panel_binary() {
   local url="https://github.com/${REPO}/releases/download/${tag}/regionhop-panel-linux-amd64"
   echo "Downloading prebuilt panel binary ($tag)..."
   curl -fsSL "$url" -o "$PREFIX/panel/psi-panel.new" || return 1
-  chmod +x "$PREFIX/panel/psi-panel.new"
+  chmod 0755 "$PREFIX/panel/psi-panel.new"
+  chown root:root "$PREFIX/panel/psi-panel.new"
   mv "$PREFIX/panel/psi-panel.new" "$PREFIX/panel/psi-panel"
-  chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/panel/psi-panel"
 }
 
 build_panel() {
@@ -202,7 +238,8 @@ build_panel() {
   else
     echo "Prebuilt binary unavailable, building web panel from source..."
     (cd "$SRC_DIR/panel" && go mod tidy && go build -ldflags "-X main.CurrentVersion=$(repo_version)" -o "$PREFIX/panel/psi-panel" .)
-    chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/panel/psi-panel"
+    chown root:root "$PREFIX/panel/psi-panel"
+    chmod 0755 "$PREFIX/panel/psi-panel"
   fi
   echo "$(repo_version)" > "$VERSION_FILE"
 }
@@ -260,7 +297,11 @@ set_env_var() {
     echo "$key=$val" >> "$PANEL_ENV"
   fi
   chmod 600 "$PANEL_ENV"
-  chown "$SERVICE_USER:$SERVICE_USER" "$PANEL_ENV"
+  # root:root, not psipanel: systemd reads EnvironmentFile= as root before
+  # dropping to User=psipanel in the unit, so the panel process itself never
+  # needs read access to this file, and giving it write access would let a
+  # compromised panel rewrite its own PANEL_ADMIN_HASH.
+  chown root:root "$PANEL_ENV"
 }
 
 random_path_prefix() {
@@ -330,8 +371,8 @@ set_psiphon_ids() {
      && ! echo "$cfg" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))' 2>/dev/null; then
     echo "WARNING: could not validate as JSON (no python3/node available to check) — saving as-is; the panel will reject it on next save if invalid." >&2
   fi
-  echo "$cfg" > "$PREFIX/panel/extra-config.json"
-  chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/panel/extra-config.json"
+  echo "$cfg" > "$PREFIX/data/extra-config.json"
+  chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/data/extra-config.json"
   echo "Saved. Existing location configs are not retroactively updated — remove and re-add them if needed."
 }
 

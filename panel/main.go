@@ -94,7 +94,6 @@ func main() {
 	mux.HandleFunc(basePath+"/tunnels/add", a.requireAuth(a.handleAdd))
 	mux.HandleFunc(basePath+"/tunnels/", a.requireAuth(a.handleTunnelAction))
 	mux.HandleFunc(basePath+"/settings", a.requireAuth(a.handleSettings))
-	mux.HandleFunc(basePath+"/update/check", a.requireAuth(a.handleUpdateCheck))
 	mux.HandleFunc(basePath+"/update", a.requireAuth(a.handleUpdateTrigger))
 
 	log.Printf("psi-panel listening on %s, base path %q (localhost-management; SOCKS ports stay bound to 127.0.0.1 independently)", listenAddr, basePath)
@@ -215,17 +214,6 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"LatestVersion":   latest,
 		"UpdateAvailable": available,
 	})
-}
-
-// handleUpdateCheck forces an immediate GitHub releases check instead of
-// waiting for the hourly background ticker, then returns to the dashboard.
-func (a *app) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", 405)
-		return
-	}
-	checkForUpdateNow()
-	http.Redirect(w, r, urlFor("/"), http.StatusSeeOther)
 }
 
 // handleUpdateTrigger starts the self-update script (via the narrowly
