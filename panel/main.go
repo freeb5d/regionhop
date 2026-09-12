@@ -15,6 +15,9 @@ import (
 //go:embed templates/*.html
 var templateFS embed.FS
 
+//go:embed static/*.css
+var staticFS embed.FS
+
 var tmpl = template.Must(template.ParseFS(templateFS, "templates/*.html"))
 
 const (
@@ -61,6 +64,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/login", a.handleLogin)
 	mux.HandleFunc("/logout", a.requireAuth(a.handleLogout))
 	mux.HandleFunc("/", a.requireAuth(a.handleDashboard))
