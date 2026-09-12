@@ -258,8 +258,20 @@ first_time_panel_setup() {
   set_panel_password
   echo
   echo "=== Save this ==="
-  echo "Panel URL:  http://<server-ip>:$port/"
+  echo "Panel URL:  http://$(server_ip):$port/"
   echo "================="
+}
+
+server_ip() {
+  # Best-effort public IP detection for the "Panel URL:" line — falls back
+  # through a few sources since not every box has outbound internet or the
+  # same tools installed, and finally to a placeholder if all of them fail
+  # (e.g. fully offline install) rather than hanging or erroring out.
+  local ip
+  ip=$(curl -fsSL --max-time 3 https://api.ipify.org 2>/dev/null) && [[ -n "$ip" ]] && { echo "$ip"; return; }
+  ip=$(curl -fsSL --max-time 3 https://ifconfig.me 2>/dev/null) && [[ -n "$ip" ]] && { echo "$ip"; return; }
+  ip=$(hostname -I 2>/dev/null | awk '{print $1}') && [[ -n "$ip" ]] && { echo "$ip"; return; }
+  echo "<server-ip>"
 }
 
 set_psiphon_ids() {
