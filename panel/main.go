@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
@@ -67,9 +68,12 @@ func main() {
 	mux.HandleFunc("/login", a.handleLogin)
 	mux.HandleFunc("/logout", a.requireAuth(a.handleLogout))
 	mux.HandleFunc("/", a.requireAuth(a.handleDashboard))
+	mux.HandleFunc("/tunnels-status", a.requireAuth(a.handleTunnelsStatus))
 	mux.HandleFunc("/tunnels/add", a.requireAuth(a.handleAdd))
 	mux.HandleFunc("/tunnels/", a.requireAuth(a.handleTunnelAction))
 	mux.HandleFunc("/settings", a.requireAuth(a.handleSettings))
+	mux.HandleFunc("/update/check", a.requireAuth(a.handleUpdateCheck))
+	mux.HandleFunc("/update", a.requireAuth(a.handleUpdateTrigger))
 
 	log.Printf("psi-panel listening on %s (localhost-management; SOCKS ports stay bound to 127.0.0.1 independently)", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, mux))
@@ -133,14 +137,14 @@ type row struct {
 	ExitRegionFlag string
 }
 
-func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
+// buildRows computes each location's live status/exit info. Called both for
+// the full dashboard render and for the /tunnels-status polling endpoint
+// the page uses to pick up state changes (e.g. connecting -> active)
+// without a manual reload.
+func (a *app) buildRows() ([]row, error) {
 	list, err := loadRegistry(registryPath)
 	if err != nil {
-		http.Error(w, "failed to load tunnels: "+err.Error(), 500)
-		return
+		return nil, err
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 
@@ -162,6 +166,18 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			ExitRegion: exitRegionLabel(info.Region), ExitRegionFlag: countryFlag(info.Region),
 		})
 	}
+	return rows, nil
+}
+
+func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	rows, err := a.buildRows()
+	if err != nil {
+		http.Error(w, "failed to load tunnels: "+err.Error(), 500)
+		return
+	}
 
 	regions := make([]regionOpt, 0, len(regionCodes))
 	for code, label := range regionCodes {
@@ -177,6 +193,49 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"LatestVersion":   latest,
 		"UpdateAvailable": available,
 	})
+}
+
+// handleUpdateCheck forces an immediate GitHub releases check instead of
+// waiting for the hourly background ticker, then returns to the dashboard.
+func (a *app) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	checkForUpdateNow()
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// handleUpdateTrigger starts the self-update script (via the narrowly
+// scoped sudoers rule in install.sh's setup_sudo_control) and returns
+// immediately — the update restarts the panel process partway through, so
+// this can't wait for it to finish. See triggerSelfUpdate's comment for why
+// output goes to a log file instead of this response.
+func (a *app) handleUpdateTrigger(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	if err := triggerSelfUpdate(); err != nil {
+		http.Error(w, "failed to start update: "+err.Error(), 500)
+		return
+	}
+	tmpl.ExecuteTemplate(w, "updating.html", nil)
+}
+
+// handleTunnelsStatus is a lightweight JSON polling endpoint the dashboard
+// page calls every few seconds to update status badges and exit flags in
+// place, without a full page reload.
+func (a *app) handleTunnelsStatus(w http.ResponseWriter, r *http.Request) {
+	a.mu.Lock()
+	rows, err := a.buildRows()
+	a.mu.Unlock()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(rows)
 }
 
 // exitRegionLabel formats a connected server's region code for display —
