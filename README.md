@@ -125,7 +125,15 @@ psictl update                # update the panel to the latest release, restart i
 
 ## Updating
 
-The dashboard shows a banner when a newer release is published. To update:
+The dashboard shows a banner (checked hourly, or on demand via the **Check
+for updates** button at the bottom of the page) when a newer release is
+published, with an **Update now** button right there — clicking it runs the
+update in the background and restarts the panel automatically.
+
+That button is deliberately the *only* thing the panel can trigger as root:
+it runs one fixed, root-owned script via a NOPASSWD `sudoers` rule scoped to
+that exact path (see [Security model](#security-model)) — not an open shell.
+It runs the same flow as:
 
 ```bash
 psictl update
@@ -137,9 +145,9 @@ or, without `psictl` installed:
 bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update
 ```
 
-This fetches the latest release, updates the panel (from the prebuilt
-binary when available), reinstalls the systemd units, and restarts the
-panel. It does **not** touch the already-built `ConsoleClient` — use
+Any of the three fetches the latest release, updates the panel (from the
+prebuilt binary when available), reinstalls the systemd units, and restarts
+the panel. None of them touch the already-built `ConsoleClient` — use
 **Rebuild core only** from the installer menu if you also want to rebuild
 the Psiphon core against its latest upstream source.
 
@@ -177,10 +185,12 @@ On the server, everything lives under `/opt/psi-panel/`:
   `HttpOnly`/`SameSite=Strict` cookies, and a 5-attempt login lockout per
   IP. Every tunnel-manipulating route requires an authenticated session.
 - The panel process runs as an unprivileged `psipanel` system user. It has
-  no standing root access — starting/stopping/restarting tunnel units goes
-  through a single, narrowly-scoped `sudoers` rule limited to exactly
-  `systemctl {enable --now|disable --now|restart} psi-tunnel@*` and
-  `systemctl restart psi-panel`; nothing else on the box is reachable
+  no standing root access. Everything it can do as root goes through one
+  narrowly-scoped `sudoers` rule limited to exactly
+  `systemctl {enable --now|disable --now|restart} psi-tunnel@*`,
+  `systemctl restart psi-panel`, and executing one fixed, root-owned
+  `self-update.sh` (no arguments, exact path) for the **Update now**
+  button — nothing else on the box, and no open shell access, is reachable
   through it.
 - Each location's own systemd service additionally runs with
   `NoNewPrivileges`, `ProtectSystem=strict`, and a scoped `ReadWritePaths`.

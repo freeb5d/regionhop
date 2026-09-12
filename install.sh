@@ -55,17 +55,20 @@ ensure_user() {
 
 setup_sudo_control() {
   # The panel runs `sudo -n systemctl {enable --now|disable --now|restart}`
-  # as the unprivileged psipanel user to manage tunnel units — grant that via
-  # a narrowly-scoped NOPASSWD sudoers rule instead of polkit: polkit's JS
-  # rules.d format and default authorization behavior differ enough across
-  # systemd/polkit versions that a rule which works on one server silently
-  # no-ops on another ("Interactive authentication required."); sudoers'
-  # command-matching semantics are stable everywhere.
+  # (and, for the Update button, sudo -n <self-update.sh>) as the
+  # unprivileged psipanel user — grant that via a narrowly-scoped NOPASSWD
+  # sudoers rule instead of polkit: polkit's JS rules.d format and default
+  # authorization behavior differ enough across systemd/polkit versions
+  # that a rule which works on one server silently no-ops on another
+  # ("Interactive authentication required."); sudoers' command-matching
+  # semantics are stable everywhere.
   local systemctl_path
   systemctl_path=$(command -v systemctl)
 
   # Remove a stale polkit rule from earlier regionhop versions, if present.
   rm -f /etc/polkit-1/rules.d/49-regionhop.rules
+
+  install_self_update_script
 
   local sudoers_file=/etc/sudoers.d/regionhop-psipanel
   local tmp
@@ -73,20 +76,37 @@ setup_sudo_control() {
   cat > "$tmp" <<EOF
 # Managed by regionhop's install.sh — do not edit by hand, it is
 # regenerated on every install/update. Scoped to exactly the operations
-# the panel needs on exactly the units it's meant to control.
+# the panel needs on exactly the units/scripts it's meant to control.
 Cmnd_Alias REGIONHOP_TUNNEL_ENABLE = $systemctl_path enable --now psi-tunnel@*
 Cmnd_Alias REGIONHOP_TUNNEL_DISABLE = $systemctl_path disable --now psi-tunnel@*
 Cmnd_Alias REGIONHOP_TUNNEL_RESTART = $systemctl_path restart psi-tunnel@*
 Cmnd_Alias REGIONHOP_PANEL_RESTART = $systemctl_path restart psi-panel
-$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART
+Cmnd_Alias REGIONHOP_SELF_UPDATE = $PREFIX/panel/self-update.sh
+$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE
 EOF
   if visudo -c -f "$tmp" &>/dev/null; then
     install -m 0440 -o root -g root "$tmp" "$sudoers_file"
   else
-    echo "WARNING: generated sudoers rule failed validation, not installing it. Panel start/stop/restart will not work until this is fixed." >&2
+    echo "WARNING: generated sudoers rule failed validation, not installing it. Panel start/stop/restart/update will not work until this is fixed." >&2
     visudo -c -f "$tmp" >&2 || true
   fi
   rm -f "$tmp"
+}
+
+install_self_update_script() {
+  # Fixed-content, root-owned script the panel is allowed to trigger via
+  # sudo (no arguments, exact path — the whole point of scoping it this
+  # narrowly in sudoers). It just re-runs the same update flow `psictl
+  # update` already uses over SSH; the panel's "Update now" button is not a
+  # separate/wider privilege surface than that.
+  mkdir -p "$PREFIX/panel"
+  cat > "$PREFIX/panel/self-update.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec bash <(curl -Ls https://raw.githubusercontent.com/${REPO}/master/install.sh) update
+EOF
+  chown root:root "$PREFIX/panel/self-update.sh"
+  chmod 0700 "$PREFIX/panel/self-update.sh"
 }
 
 ensure_dirs() {

@@ -50,28 +50,32 @@ func versionLess(a, b string) bool {
 	return false
 }
 
+// checkForUpdateNow synchronously refreshes the cached "latest release"
+// value; used both by the periodic ticker and the panel's "Check for
+// updates" button.
+func checkForUpdateNow() {
+	latest, err := fetchLatestVersion()
+	updates.mu.Lock()
+	updates.checkedAt = time.Now()
+	if err != nil {
+		updates.checkErr = err.Error()
+	} else {
+		updates.latest = latest
+		updates.checkErr = ""
+	}
+	updates.mu.Unlock()
+}
+
 // startUpdateChecker polls GitHub's "latest release" API on an interval and
 // caches the result; the dashboard reads the cache so page loads never block
 // on a network call to GitHub.
 func startUpdateChecker(interval time.Duration) {
-	check := func() {
-		latest, err := fetchLatestVersion()
-		updates.mu.Lock()
-		updates.checkedAt = time.Now()
-		if err != nil {
-			updates.checkErr = err.Error()
-		} else {
-			updates.latest = latest
-			updates.checkErr = ""
-		}
-		updates.mu.Unlock()
-	}
-	check()
+	checkForUpdateNow()
 	go func() {
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for range t.C {
-			check()
+			checkForUpdateNow()
 		}
 	}()
 }
