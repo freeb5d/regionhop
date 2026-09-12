@@ -6,18 +6,39 @@
 set -euo pipefail
 
 PREFIX=/opt/psi-panel
-SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL="https://github.com/freeb5d/regionhop.git"
+CHECKOUT_DIR=/opt/regionhop-src
 SERVICE_USER=psipanel
 GO_VERSION=1.22.9
 PANEL_ENV="$PREFIX/panel/panel.env"
 REGISTRY="$PREFIX/data/tunnels.json"
 
-need_root() {
-  if [[ $EUID -ne 0 ]]; then
-    echo "Run this as root (sudo bash install.sh)." >&2
-    exit 1
+if [[ $EUID -ne 0 ]]; then
+  echo "Run this as root, e.g.:" >&2
+  echo "  sudo bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh)" >&2
+  exit 1
+fi
+
+# Resolve SRC_DIR: if this script is run from a real checkout (has sibling
+# systemd/ and panel/ dirs), use that. If it's run standalone — e.g. via
+#   bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh)
+# — ${BASH_SOURCE[0]} points at a process-substitution fd with no siblings,
+# so clone the repo first and use that checkout instead.
+_candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+if [[ -n "$_candidate" && -d "$_candidate/systemd" && -d "$_candidate/panel" ]]; then
+  SRC_DIR="$_candidate"
+else
+  if ! command -v git &>/dev/null; then
+    apt-get update -y && apt-get install -y --no-install-recommends git ca-certificates
   fi
-}
+  if [[ -d "$CHECKOUT_DIR/.git" ]]; then
+    git -C "$CHECKOUT_DIR" pull --ff-only
+  else
+    rm -rf "$CHECKOUT_DIR"
+    git clone --depth 1 "$REPO_URL" "$CHECKOUT_DIR"
+  fi
+  SRC_DIR="$CHECKOUT_DIR"
+fi
 
 ensure_user() {
   if ! id "$SERVICE_USER" &>/dev/null; then
@@ -228,5 +249,4 @@ menu() {
   done
 }
 
-need_root
 menu
