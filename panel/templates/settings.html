@@ -13,29 +13,44 @@
     </div>
   </div>
 
-  <div class="main" style="max-width:560px">
+  <div class="main" style="max-width:640px">
     <div class="page-header">
-      <h1>Psiphon credentials</h1>
+      <h1>Psiphon config</h1>
       <div class="desc">Applied to every new location added from now on.</div>
     </div>
 
     <div class="card">
       {{if .Saved}}<div class="alert alert-success">Saved.</div>{{end}}
+      {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
       <form method="post" action="/settings">
         <div class="field">
-          <label for="pcid">PropagationChannelId</label>
-          <input id="pcid" type="text" name="propagation_channel_id" value="{{.PropagationChannelID}}" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="sid">SponsorId</label>
-          <input id="sid" type="text" name="sponsor_id" value="{{.SponsorID}}" autocomplete="off">
+          <label for="cfg">Config JSON</label>
+          <textarea id="cfg" name="config_json" autocomplete="off" rows="14" placeholder='{
+  "PropagationChannelId": "...",
+  "SponsorId": "...",
+  "RemoteServerListUrl": "...",
+  "RemoteServerListSignaturePublicKey": "...",
+  "ObfuscatedServerListRootURL": "...",
+  "ServerEntrySignaturePublicKey": "...",
+  "NetworkID": "..."
+}'>{{.ConfigJSON}}</textarea>
         </div>
         <button type="submit">Save</button>
       </form>
       <div class="card-sub">
-        Not retroactively applied to existing locations — remove and re-add a
-        location (or edit <span class="mono">/opt/psi-panel/configs/&lt;name&gt;.json</span>
-        directly) to update it.
+        Paste the full JSON object from your own Psiphon deployment config —
+        <span class="mono">PropagationChannelId</span>, <span class="mono">SponsorId</span>,
+        and anything else it includes. Applied to every location added from
+        now on; not retroactively applied to existing ones — remove and
+        re-add a location (or edit
+        <span class="mono">/opt/psi-panel/configs/&lt;name&gt;.json</span> directly)
+        to update it.<br><br>
+        <span class="mono">EgressRegion</span>, <span class="mono">LocalSocksProxyPort</span>,
+        <span class="mono">ListenInterface</span>, and <span class="mono">DataRootDirectory</span>
+        always come from regionhop itself and cannot be overridden here, no
+        matter what's pasted — that's what keeps every SOCKS proxy bound to
+        127.0.0.1. regionhop does not supply, validate, or know the meaning
+        of anything you put in this box.
       </div>
     </div>
   </div>
