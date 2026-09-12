@@ -1,15 +1,15 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>regionhop</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="{{url "/static/style.css"}}">
 </head>
 <body>
 <div class="page">
   <div class="topbar">
     <div class="brand"><div class="brand-mark">R</div>regionhop</div>
     <div class="nav-actions">
-      <a class="btn btn-ghost btn-sm" href="/settings">Credentials</a>
-      <form class="inline" method="post" action="/logout"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
+      <a class="btn btn-ghost btn-sm" href="{{url "/settings"}}">Credentials</a>
+      <form class="inline" method="post" action="{{url "/logout"}}"><button class="btn-ghost btn-sm" type="submit">Log out</button></form>
     </div>
   </div>
 
@@ -17,7 +17,7 @@
     {{if .UpdateAvailable}}
     <div class="alert alert-update" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
       <span>Update available: <strong>v{{.LatestVersion}}</strong> (running v{{.CurrentVersion}}).</span>
-      <form class="inline" method="post" action="/update" onsubmit="return confirm('Update regionhop now? The panel will restart automatically.');">
+      <form class="inline" method="post" action="{{url "/update"}}" onsubmit="return confirm('Update regionhop now? The panel will restart automatically.');">
         <button type="submit" class="btn-sm">Update now</button>
       </form>
     </div>
@@ -29,7 +29,7 @@
 
     <div class="card">
       <h2>Add location</h2>
-      <form method="post" action="/tunnels/add">
+      <form method="post" action="{{url "/tunnels/add"}}">
         <div class="inline-form">
           <div class="field">
             <label for="name">Name</label>
@@ -64,10 +64,10 @@
           </td>
           <td>
             <div class="actions">
-              <form class="inline" method="post" action="/tunnels/{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">Restart</button></form>
-              <form class="inline" method="post" action="/tunnels/{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">Stop</button></form>
-              <form class="inline" method="post" action="/tunnels/{{.Name}}/remove" onsubmit="return confirm('Remove {{.Name}}?');"><button class="btn-danger btn-sm" type="submit">Remove</button></form>
-              <a class="btn btn-ghost btn-sm" href="/tunnels/{{.Name}}/logs">Logs</a>
+              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">Restart</button></form>
+              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">Stop</button></form>
+              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/remove" onsubmit="return confirm('Remove {{.Name}}?');"><button class="btn-danger btn-sm" type="submit">Remove</button></form>
+              <a class="btn btn-ghost btn-sm" href="{{url "/tunnels/"}}{{.Name}}/logs">Logs</a>
             </div>
           </td>
         </tr>
@@ -79,7 +79,7 @@
     </div>
     <div class="note" style="margin-top:1rem;display:flex;align-items:center;gap:0.6rem">
       regionhop v{{.CurrentVersion}}
-      <form class="inline" method="post" action="/update/check">
+      <form class="inline" method="post" action="{{url "/update/check"}}">
         <button type="submit" class="btn-ghost btn-sm" style="padding:0.1rem 0.5rem;font-size:0.75rem">Check for updates</button>
       </form>
     </div>
@@ -117,7 +117,7 @@
   }
 
   function poll() {
-    fetch("/tunnels-status", { credentials: "same-origin" })
+    fetch({{url "/tunnels-status"}}, { credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (rows) { (rows || []).forEach(applyUpdate); })
       .catch(function () { /* transient failure, try again next tick */ });

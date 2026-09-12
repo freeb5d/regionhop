@@ -1,5 +1,7 @@
 <div align="center">
 
+**English · [Русский](README.ru.md) · [فارسی](README.fa.md) · [中文](README.zh.md)**
+
 # regionhop
 
 **Multi-region Psiphon tunnel manager for a single Linux server.**
@@ -66,7 +68,11 @@ back to building it from source if that's ever unavailable), builds
 `psiphon-tunnel-core`'s `ConsoleClient` from source, installs the systemd
 units, adds a firewall rule blocking external access to the SOCKS port range,
 and walks you through setting the panel's admin password. It prints the
-panel's URL at the end.
+panel's URL at the end — including a random path prefix (e.g.
+`http://1.2.3.4:34521/a1b2c3d4e5f6/`), not just a random port. Save that
+whole URL; the bare port with no path won't work, and (deliberately) won't
+even tell a scanner anything is listening there — bare requests to the root
+path get a generic 404, same as any other unknown path.
 
 You can re-run the same command any time to reopen the menu (rebuild the
 core, rotate the password, check status, uninstall, etc.) — it's idempotent.
