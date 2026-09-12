@@ -243,10 +243,21 @@ first_time_panel_setup() {
 }
 
 set_psiphon_ids() {
-  read -rp "PropagationChannelId: " pcid
-  read -rp "SponsorId: " sid
-  set_env_var PSIPHON_PROPAGATION_CHANNEL_ID "$pcid"
-  set_env_var PSIPHON_SPONSOR_ID "$sid"
+  echo "Paste the full JSON object from your own Psiphon deployment config"
+  echo "(PropagationChannelId, SponsorId, RemoteServerListUrl, signature public"
+  echo "keys, NetworkID, etc.). End input with Ctrl-D:"
+  local cfg
+  cfg=$(cat)
+  if [[ -z "$cfg" ]]; then
+    echo "Nothing entered, leaving existing config unchanged." >&2
+    return 1
+  fi
+  if ! echo "$cfg" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null \
+     && ! echo "$cfg" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))' 2>/dev/null; then
+    echo "WARNING: could not validate as JSON (no python3/node available to check) — saving as-is; the panel will reject it on next save if invalid." >&2
+  fi
+  echo "$cfg" > "$PREFIX/panel/extra-config.json"
+  chown "$SERVICE_USER:$SERVICE_USER" "$PREFIX/panel/extra-config.json"
   echo "Saved. Existing location configs are not retroactively updated — remove and re-add them if needed."
 }
 

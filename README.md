@@ -53,12 +53,16 @@ core, rotate the password, check status, uninstall, etc.) — it's idempotent.
 
 ## Before you add a location
 
-Psiphon requires a `PropagationChannelId` and `SponsorId` issued to you by
+Psiphon requires a config (`PropagationChannelId`, `SponsorId`, and usually
+`RemoteServerListUrl`/signature public keys) issued to you by
 [Psiphon Inc.](https://psiphon.ca) as a registered partner — regionhop has no
-way to generate or fetch these, and doesn't ship any. Enter yours from the
-panel's **Psiphon credentials** page (or via the installer's menu option)
-before adding your first location; every location added afterwards picks
-them up automatically.
+way to generate or fetch this, and doesn't ship any of it. Paste your own
+config as a JSON object into the panel's **Psiphon config** page (or via the
+installer's menu option) before adding your first location; every location
+added afterwards picks it up automatically. `EgressRegion`,
+`LocalSocksProxyPort`, `ListenInterface`, and `DataRootDirectory` always come
+from regionhop itself and can't be overridden by what you paste — that's
+what keeps every SOCKS proxy bound to `127.0.0.1` regardless.
 
 ## How it's laid out
 

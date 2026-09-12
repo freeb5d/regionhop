@@ -9,9 +9,9 @@ import (
 
 // Tunnel is one location/region entry managed by the panel.
 type Tunnel struct {
-	Name       string `json:"name"`
-	Region     string `json:"region"`
-	SocksPort  int    `json:"socks_port"`
+	Name      string `json:"name"`
+	Region    string `json:"region"`
+	SocksPort int    `json:"socks_port"`
 }
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,30}$`)

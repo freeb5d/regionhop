@@ -150,6 +150,7 @@ label {
 
 input[type="text"],
 input[type="password"],
+textarea,
 select {
   width: 100%;
   padding: 0.55rem 0.7rem;
@@ -164,12 +165,20 @@ select {
 
 input[type="text"]:focus,
 input[type="password"]:focus,
+textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-input::placeholder { color: var(--text-faint); }
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+
+textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
 
 .field { margin-bottom: 1rem; }
 .field:last-of-type { margin-bottom: 0; }
