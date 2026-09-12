@@ -31,7 +31,7 @@ actions are available over SSH via a `psictl` command.
 ## Install
 
 ```bash
-sudo bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh)
 ```
 
 This opens an interactive menu. For a first run, pick **1) Full setup** — it
@@ -106,7 +106,7 @@ psictl update
 or, without `psictl` installed:
 
 ```bash
-sudo bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update
+bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update
 ```
 
 This fetches the latest release, updates the panel (from the prebuilt
