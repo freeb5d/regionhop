@@ -46,6 +46,10 @@ ensure_user() {
   if ! id "$SERVICE_USER" &>/dev/null; then
     useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
   fi
+  # Lets the panel (running as this unprivileged user) read `journalctl -u
+  # psi-tunnel@<name>` for the Logs page — without this, journalctl refuses
+  # with "No journal files were opened due to insufficient permissions."
+  usermod -aG systemd-journal "$SERVICE_USER"
 }
 
 ensure_dirs() {
@@ -284,6 +288,7 @@ self_update() {
       || git clone --depth 1 "$REPO_URL" "$CHECKOUT_DIR"
   fi
   SRC_DIR="$CHECKOUT_DIR"
+  ensure_user
   build_panel
   install_units
   systemctl restart psi-panel 2>/dev/null || true
@@ -329,7 +334,7 @@ menu() {
         first_time_panel_setup; start_panel; install_psictl
         ;;
       2) ensure_go; build_core ;;
-      3) build_panel; systemctl restart psi-panel 2>/dev/null || true ;;
+      3) ensure_user; build_panel; systemctl restart psi-panel 2>/dev/null || true ;;
       4) set_psiphon_ids ;;
       5) set_panel_password; systemctl restart psi-panel 2>/dev/null || true ;;
       6) install_units; start_panel ;;
