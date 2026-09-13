@@ -143,44 +143,49 @@ type tunnelInfo struct {
 // systemd's own state (inactive/failed/activating/...) when the unit isn't
 // running at all.
 //
-// Connection state comes from a backward scan of a small recent journal
-// window: psiphon-tunnel-core emits {"noticeType":"Tunnels","data":
-// {"count":N}} every time its connected-tunnel count changes, so the most
-// recent one is always fresh. The exit region comes from a separate,
-// full-history `journalctl --grep` lookup instead of that same small
-// window: {"noticeType":"ConnectedServerRegion","data":
-// {"serverRegion":"XX"}} is emitted exactly once right after connecting,
-// so on a long-running tunnel it can scroll out of a bounded recent-lines
-// window long before the tunnel itself disconnects.
+// Both connection state and exit region come from full-history
+// `journalctl --grep` lookups rather than a bounded recent-lines window:
+// psiphon-tunnel-core only emits {"noticeType":"Tunnels","data":{"count":N}}
+// when its connected-tunnel count actually *changes* — once, right after
+// connecting, not repeated afterward — same as the once-only
+// ConnectedServerRegion notice used for the exit region below. On a
+// long-running, stable tunnel that one "count > 0" notice scrolls out of
+// any fixed-size recent-window scan long before the tunnel itself would
+// ever disconnect, which previously made status show "connecting" forever
+// on any tunnel that had been up for more than a few dozen journal lines'
+// worth of housekeeping — active tunnels included.
 func tunnelStatusInfo(name string) tunnelInfo {
 	svcState := tunnelStatus(name)
 	if svcState != "active" {
 		return tunnelInfo{State: svcState}
 	}
 
-	out, err := tunnelLogs(name, 100)
-	if err != nil {
-		return tunnelInfo{State: "connecting"}
-	}
+	return tunnelInfo{State: latestTunnelsState(name), Region: connectedServerRegion(name)}
+}
 
-	state := ""
-	lines := strings.Split(out, "\n")
-	for i := len(lines) - 1; i >= 0 && state == ""; i-- {
+func latestTunnelsState(name string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "journalctl",
+		"-u", unitName(name),
+		"--grep", `"noticeType":"Tunnels"`,
+		"-n", "5", "--no-pager")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "connecting"
+	}
+	lines := strings.Split(string(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
 		n, ok := parseNoticeLine(lines[i])
 		if !ok || n.NoticeType != "Tunnels" {
 			continue
 		}
 		if n.Data.Count > 0 {
-			state = "active"
-		} else {
-			state = "connecting"
+			return "active"
 		}
+		return "connecting"
 	}
-	if state == "" {
-		state = "connecting"
-	}
-
-	return tunnelInfo{State: state, Region: connectedServerRegion(name)}
+	return "connecting"
 }
 
 func parseNoticeLine(line string) (psiphonNotice, bool) {
