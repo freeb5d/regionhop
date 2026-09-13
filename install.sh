@@ -154,6 +154,7 @@ fix_prefix_ownership() {
   chmod 0755 "$PREFIX" "$PREFIX/core" "$PREFIX/panel" 2>/dev/null || true
   [[ -f "$PREFIX/core/ConsoleClient" ]] && { chown root:root "$PREFIX/core/ConsoleClient"; chmod 0755 "$PREFIX/core/ConsoleClient"; }
   [[ -f "$PREFIX/panel/psi-panel" ]] && { chown root:root "$PREFIX/panel/psi-panel"; chmod 0755 "$PREFIX/panel/psi-panel"; }
+  [[ -f "$PREFIX/healthcheck.sh" ]] && { chown root:root "$PREFIX/healthcheck.sh"; chmod 0755 "$PREFIX/healthcheck.sh"; }
   [[ -f "$PANEL_ENV" ]] && { chown root:root "$PANEL_ENV"; chmod 0600 "$PANEL_ENV"; }
   mkdir -p "$PREFIX/configs" "$PREFIX/data"
   chown -R "$SERVICE_USER:$SERVICE_USER" "$PREFIX/configs" "$PREFIX/data"
@@ -244,10 +245,24 @@ build_panel() {
   echo "$(repo_version)" > "$VERSION_FILE"
 }
 
+install_healthcheck() {
+  # See healthcheck.sh's own header for what this does and why. Same
+  # ownership treatment as the ConsoleClient/psi-panel binaries above: lives
+  # in the root-owned $PREFIX tree even though psipanel (which runs it) only
+  # ever needs to execute it, not write it.
+  cp "$SRC_DIR/healthcheck.sh" "$PREFIX/healthcheck.sh"
+  chown root:root "$PREFIX/healthcheck.sh"
+  chmod 0755 "$PREFIX/healthcheck.sh"
+}
+
 install_units() {
   cp "$SRC_DIR/systemd/psi-tunnel@.service" /etc/systemd/system/
   cp "$SRC_DIR/systemd/psi-panel.service" /etc/systemd/system/
+  cp "$SRC_DIR/systemd/psi-healthcheck.service" /etc/systemd/system/
+  cp "$SRC_DIR/systemd/psi-healthcheck.timer" /etc/systemd/system/
+  install_healthcheck
   systemctl daemon-reload
+  systemctl enable --now psi-healthcheck.timer
 }
 
 setup_firewall() {
@@ -463,10 +478,12 @@ uninstall_all() {
   read -rp "This removes the panel, all tunnels, and their data. Type YES to continue: " c
   [[ "$c" == "YES" ]] || { echo "Aborted."; return; }
   systemctl disable --now psi-panel.service 2>/dev/null || true
+  systemctl disable --now psi-healthcheck.timer 2>/dev/null || true
   for u in $(systemctl list-units --all 'psi-tunnel@*' --no-legend | awk '{print $1}'); do
     systemctl disable --now "$u" 2>/dev/null || true
   done
-  rm -f /etc/systemd/system/psi-panel.service /etc/systemd/system/psi-tunnel@.service
+  rm -f /etc/systemd/system/psi-panel.service /etc/systemd/system/psi-tunnel@.service \
+        /etc/systemd/system/psi-healthcheck.service /etc/systemd/system/psi-healthcheck.timer
   systemctl daemon-reload
   rm -f /etc/sudoers.d/regionhop-psipanel /etc/polkit-1/rules.d/49-regionhop.rules
   rm -rf "$PREFIX" "$ADMIN_DIR" /usr/local/bin/psictl

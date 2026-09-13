@@ -189,6 +189,8 @@ type row struct {
 	StatusClass string
 	ExitRegion  string
 	ExitFlagURL string
+	Health      string // "ok", "fail", or "" when no probe result exists yet
+	HealthAge   string
 }
 
 // buildRows computes each location's live status/exit info. Called both for
@@ -202,6 +204,7 @@ func (a *app) buildRows() ([]row, error) {
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 
+	health := readHealth()
 	rows := make([]row, 0, len(list))
 	for _, t := range list {
 		info := tunnelStatusInfo(t.Name)
@@ -214,11 +217,16 @@ func (a *app) buildRows() ([]row, error) {
 		case "inactive", "failed":
 			class = "inactive"
 		}
-		rows = append(rows, row{
+		r := row{
 			Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort,
 			Status: info.State, StatusClass: class,
 			ExitRegion: exitRegionLabel(info.Region), ExitFlagURL: flagImageURL(info.Region),
-		})
+		}
+		if h, ok := health[t.Name]; ok {
+			r.Health = h.Result
+			r.HealthAge = healthAge(h.Time)
+		}
+		rows = append(rows, r)
 	}
 	return rows, nil
 }
