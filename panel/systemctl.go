@@ -122,6 +122,7 @@ func tunnelLogs(name string, lines int) (string, error) {
 
 type psiphonNotice struct {
 	NoticeType string `json:"noticeType"`
+	Timestamp  string `json:"timestamp"` // RFC3339; compared as a string to pick the truly most recent match, see latestNotice
 	Data       struct {
 		Count  int    `json:"count"`
 		Region string `json:"serverRegion"`
@@ -164,26 +165,12 @@ func tunnelStatusInfo(name string) tunnelInfo {
 }
 
 func latestTunnelsState(name string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "journalctl",
-		"-u", unitName(name),
-		"--grep", `"noticeType":"Tunnels"`,
-		"-n", "5", "--no-pager")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	n, ok := latestNotice(name, "Tunnels")
+	if !ok {
 		return "connecting"
 	}
-	lines := strings.Split(string(out), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		n, ok := parseNoticeLine(lines[i])
-		if !ok || n.NoticeType != "Tunnels" {
-			continue
-		}
-		if n.Data.Count > 0 {
-			return "active"
-		}
-		return "connecting"
+	if n.Data.Count > 0 {
+		return "active"
 	}
 	return "connecting"
 }
@@ -200,30 +187,58 @@ func parseNoticeLine(line string) (psiphonNotice, bool) {
 	return n, true
 }
 
+// latestNotice returns the most recent notice of the given type for a
+// location, searched across the unit's full journal history (not a bounded
+// recent window — see tunnelStatusInfo's comment for why that matters for
+// once-only notices like Tunnels and ConnectedServerRegion).
+//
+// Deliberately does NOT trust journalctl's own output ordering to find
+// "most recent" — combined with --grep, journalctl has been observed to
+// print matches newest-first rather than the oldest-first order a plain
+// `journalctl -u <unit>` gives, and relying on that silently picked a STALE
+// match instead of the current one (e.g. an old "Tunnels":{"count":0} from
+// hours before a tunnel connected, overriding the current "count":1 and
+// showing "connecting" forever on a tunnel that was actually fine). Each
+// notice carries its own "timestamp" field, so every candidate line is
+// parsed and compared by that instead — correct regardless of what order
+// journalctl happens to print them in on any given system/version.
+func latestNotice(name, noticeType string) (psiphonNotice, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "journalctl",
+		"-u", unitName(name),
+		"--grep", `"noticeType":"`+noticeType+`"`,
+		"-n", "5", "--no-pager")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return psiphonNotice{}, false
+	}
+	var latest psiphonNotice
+	found := false
+	for _, line := range strings.Split(string(out), "\n") {
+		n, ok := parseNoticeLine(line)
+		if !ok || n.NoticeType != noticeType {
+			continue
+		}
+		if !found || n.Timestamp > latest.Timestamp {
+			latest = n
+			found = true
+		}
+	}
+	return latest, found
+}
+
 // connectedServerRegion searches the whole journal for this unit for its
 // (single, one-time-per-connection) ConnectedServerRegion notice, returning
 // the most recent one. Uses journalctl's own indexed --grep instead of
 // pulling N lines client-side, so it stays cheap and correct no matter how
 // long the tunnel has been running or how noisy its log is.
 func connectedServerRegion(name string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "journalctl",
-		"-u", unitName(name),
-		"--grep", `"noticeType":"ConnectedServerRegion"`,
-		"-n", "5", "--no-pager")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	n, ok := latestNotice(name, "ConnectedServerRegion")
+	if !ok {
 		return ""
 	}
-	lines := strings.Split(string(out), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		n, ok := parseNoticeLine(lines[i])
-		if ok && n.NoticeType == "ConnectedServerRegion" && n.Data.Region != "" {
-			return n.Data.Region
-		}
-	}
-	return ""
+	return n.Data.Region
 }
 
 // countryFlag turns a 2-letter ISO country code into its flag emoji by
