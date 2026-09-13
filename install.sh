@@ -35,7 +35,16 @@ else
     apt-get update -y && apt-get install -y --no-install-recommends git ca-certificates
   fi
   if [[ -d "$CHECKOUT_DIR/.git" ]]; then
-    git -C "$CHECKOUT_DIR" pull --ff-only
+    # This checkout only ever mirrors upstream master — nothing local is
+    # ever committed into it — so a hard reset to origin/master is always
+    # the right outcome here, not a merge/rebase decision. Plain `pull
+    # --ff-only` fails outright if upstream's history was ever rewritten
+    # (a force-push changes every commit hash, so the old shallow clone and
+    # the new origin aren't a fast-forward of each other at all), which
+    # would otherwise turn one rewrite into a permanently broken `psictl
+    # update` for every server that installed before it.
+    git -C "$CHECKOUT_DIR" fetch --depth 1 origin master
+    git -C "$CHECKOUT_DIR" reset --hard origin/master
   else
     rm -rf "$CHECKOUT_DIR"
     git clone --depth 1 "$REPO_URL" "$CHECKOUT_DIR"
@@ -459,7 +468,12 @@ self_update() {
   echo "Updating checkout to $latest..."
   if [[ -d "$CHECKOUT_DIR/.git" ]]; then
     git -C "$CHECKOUT_DIR" fetch --depth 1 origin "$latest"
-    git -C "$CHECKOUT_DIR" checkout -q "$latest" 2>/dev/null || git -C "$CHECKOUT_DIR" checkout -q master
+    # -f: this checkout is never locally modified, so any conflict here can
+    # only be an artifact of a prior upstream history rewrite — always take
+    # the freshly fetched ref, the same reasoning as the reset --hard above.
+    git -C "$CHECKOUT_DIR" checkout -qf "FETCH_HEAD" 2>/dev/null \
+      || { git -C "$CHECKOUT_DIR" fetch --depth 1 origin master \
+           && git -C "$CHECKOUT_DIR" checkout -qf "FETCH_HEAD"; }
   else
     rm -rf "$CHECKOUT_DIR"
     git clone --depth 1 --branch "$latest" "$REPO_URL" "$CHECKOUT_DIR" 2>/dev/null \
