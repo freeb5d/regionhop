@@ -163,7 +163,6 @@ fix_prefix_ownership() {
   chmod 0755 "$PREFIX" "$PREFIX/core" "$PREFIX/panel" 2>/dev/null || true
   [[ -f "$PREFIX/core/ConsoleClient" ]] && { chown root:root "$PREFIX/core/ConsoleClient"; chmod 0755 "$PREFIX/core/ConsoleClient"; }
   [[ -f "$PREFIX/panel/psi-panel" ]] && { chown root:root "$PREFIX/panel/psi-panel"; chmod 0755 "$PREFIX/panel/psi-panel"; }
-  [[ -f "$PREFIX/healthcheck.sh" ]] && { chown root:root "$PREFIX/healthcheck.sh"; chmod 0755 "$PREFIX/healthcheck.sh"; }
   [[ -f "$PANEL_ENV" ]] && { chown root:root "$PANEL_ENV"; chmod 0600 "$PANEL_ENV"; }
   mkdir -p "$PREFIX/configs" "$PREFIX/data"
   chown -R "$SERVICE_USER:$SERVICE_USER" "$PREFIX/configs" "$PREFIX/data"
@@ -254,24 +253,25 @@ build_panel() {
   echo "$(repo_version)" > "$VERSION_FILE"
 }
 
-install_healthcheck() {
-  # See healthcheck.sh's own header for what this does and why. Same
-  # ownership treatment as the ConsoleClient/psi-panel binaries above: lives
-  # in the root-owned $PREFIX tree even though psipanel (which runs it) only
-  # ever needs to execute it, not write it.
-  cp "$SRC_DIR/healthcheck.sh" "$PREFIX/healthcheck.sh"
-  chown root:root "$PREFIX/healthcheck.sh"
-  chmod 0755 "$PREFIX/healthcheck.sh"
-}
-
 install_units() {
   cp "$SRC_DIR/systemd/psi-tunnel@.service" /etc/systemd/system/
   cp "$SRC_DIR/systemd/psi-panel.service" /etc/systemd/system/
-  cp "$SRC_DIR/systemd/psi-healthcheck.service" /etc/systemd/system/
-  cp "$SRC_DIR/systemd/psi-healthcheck.timer" /etc/systemd/system/
-  install_healthcheck
   systemctl daemon-reload
-  systemctl enable --now psi-healthcheck.timer
+  remove_healthcheck
+}
+
+# The traffic liveness probe (healthcheck.sh + psi-healthcheck.service/timer)
+# shipped in v1.8.0-v1.8.4 and was removed by user request (unwanted CPU
+# use, feature not needed). This tears it down on any server that installed
+# one of those versions -- called from install_units so a plain `psictl
+# update` actually stops it, not just skips installing it on new servers.
+# Safe to call unconditionally: every step is a no-op if nothing is present.
+remove_healthcheck() {
+  systemctl disable --now psi-healthcheck.timer 2>/dev/null || true
+  systemctl disable --now psi-healthcheck.service 2>/dev/null || true
+  rm -f /etc/systemd/system/psi-healthcheck.service /etc/systemd/system/psi-healthcheck.timer
+  systemctl daemon-reload
+  rm -f "$PREFIX/healthcheck.sh" "$PREFIX/data/health.json"
 }
 
 setup_firewall() {

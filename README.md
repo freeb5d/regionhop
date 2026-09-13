@@ -166,7 +166,6 @@ the Psiphon core against its latest upstream source.
 | `panel/` | Go web panel (auth, dashboard, settings) |
 | `systemd/psi-tunnel@.service` | One systemd template, instantiated per region as `psi-tunnel@<name>` |
 | `systemd/psi-panel.service` | The panel's own systemd unit |
-| `healthcheck.sh` + `systemd/psi-healthcheck.{service,timer}` | Every 5 minutes, probes each location's own SOCKS proxy directly (not just its systemd/connection state) and records ok/fail — surfaced as the dashboard's **Traffic** column |
 
 On the server, everything lives under `/opt/psi-panel/`:
 
@@ -176,8 +175,6 @@ On the server, everything lives under `/opt/psi-panel/`:
 ├── configs/<name>.json      # one generated Psiphon config per location
 ├── data/<name>/             # per-location Psiphon data dir
 ├── data/tunnels.json        # panel's registry of locations
-├── data/health.json         # latest per-location traffic-probe result
-├── healthcheck.sh           # traffic liveness probe, run every 5 min
 ├── panel/psi-panel          # panel binary (downloaded or built)
 ├── panel/extra-config.json  # your pasted Psiphon deployment config
 └── VERSION                  # currently installed regionhop version

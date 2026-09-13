@@ -381,10 +381,10 @@ pre.logs {
   .brand { flex: 1 1 auto; }
   .nav-actions { flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
   /* Region and SOCKS port are the least essential columns at a glance (the
-     rest — name, live status, exit flag, traffic, actions — are what you
-     actually need on a phone); hiding them keeps the table usable without
-     forcing horizontal scroll on most devices. table-wrap's own overflow-x
-     still covers anything narrower than that. */
+     rest — name, live status, exit flag, actions — are what you actually
+     need on a phone); hiding them keeps the table usable without forcing
+     horizontal scroll on most devices. table-wrap's own overflow-x still
+     covers anything narrower than that. */
   th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { display: none; }
   th, td { padding: 0.65rem 0.7rem; }
   .actions { gap: 0.3rem; }
