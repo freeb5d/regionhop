@@ -55,7 +55,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>{{t .Lang "table.name"}}</th><th>{{t .Lang "table.region"}}</th><th>{{t .Lang "table.socks"}}</th><th>{{t .Lang "table.status"}}</th><th>{{t .Lang "table.flag"}}</th><th title='{{t .Lang "health.tooltip"}}'>{{t .Lang "table.traffic"}}</th><th>{{t .Lang "table.actions"}}</th></tr>
+          <tr><th>{{t .Lang "table.name"}}</th><th>{{t .Lang "table.region"}}</th><th>{{t .Lang "table.socks"}}</th><th>{{t .Lang "table.status"}}</th><th>{{t .Lang "table.flag"}}</th><th>{{t .Lang "table.actions"}}</th></tr>
         </thead>
         <tbody>
         {{$lang := .Lang}}
@@ -68,12 +68,6 @@
           <td title="{{.ExitRegion}}" data-role="exit">
             {{if .ExitFlagURL}}<img src="{{.ExitFlagURL}}" alt="{{.ExitRegion}}" width="20" height="15" style="vertical-align:middle;border-radius:2px">{{else if eq .Status "active"}}<span class="note">…</span>{{else}}<span class="note">—</span>{{end}}
           </td>
-          <td data-role="health">
-            {{if eq .Health "ok"}}<span class="badge active">{{t $lang "health.ok"}}</span>
-            {{else if eq .Health "fail"}}<span class="badge inactive">{{t $lang "health.fail"}}</span>
-            {{else}}<span class="badge unknown">{{t $lang "health.unknown"}}</span>{{end}}
-            {{if .HealthAge}}<div class="note" style="margin-top:0.2rem">{{.HealthAge}}</div>{{end}}
-          </td>
           <td>
             <div class="actions">
               <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">{{t $lang "action.restart"}}</button></form>
@@ -84,7 +78,7 @@
           </td>
         </tr>
         {{else}}
-        <tr class="empty-row"><td colspan="7">{{t .Lang "table.empty"}}</td></tr>
+        <tr class="empty-row"><td colspan="6">{{t .Lang "table.empty"}}</td></tr>
         {{end}}
         </tbody>
       </table>
@@ -106,11 +100,6 @@
     failed: {{t .Lang "status.failed"}},
     unknown: {{t .Lang "status.unknown"}}
   };
-  var HEALTH_LABEL = {
-    ok: {{t .Lang "health.ok"}},
-    fail: {{t .Lang "health.fail"}}
-  };
-  var HEALTH_UNKNOWN = {{t .Lang "health.unknown"}};
 
   function applyUpdate(row) {
     var tr = document.querySelector('tr[data-tunnel="' + CSS.escape(row.Name) + '"]');
@@ -133,33 +122,6 @@
         exitEl.innerHTML = '<span class="note">…</span>';
       } else {
         exitEl.innerHTML = '<span class="note">—</span>';
-      }
-    }
-
-    var healthEl = tr.querySelector('[data-role="health"]');
-    if (healthEl) {
-      // Built with DOM APIs (not innerHTML) since HealthAge, unlike the
-      // other fields patched here, isn't drawn from a small fixed set of
-      // server-controlled values.
-      healthEl.textContent = "";
-      var badge = document.createElement("span");
-      if (row.Health === "ok") {
-        badge.className = "badge active";
-        badge.textContent = HEALTH_LABEL.ok;
-      } else if (row.Health === "fail") {
-        badge.className = "badge inactive";
-        badge.textContent = HEALTH_LABEL.fail;
-      } else {
-        badge.className = "badge unknown";
-        badge.textContent = HEALTH_UNKNOWN;
-      }
-      healthEl.appendChild(badge);
-      if (row.HealthAge) {
-        var age = document.createElement("div");
-        age.className = "note";
-        age.style.marginTop = "0.2rem";
-        age.textContent = row.HealthAge;
-        healthEl.appendChild(age);
       }
     }
   }
