@@ -1,9 +1,29 @@
 #!/usr/bin/env bash
 # Psiphon multi-region tunnel manager — installer / menu.
-# Run as root on a Debian/Ubuntu (systemd) server. Everything it manages
-# (the SOCKS proxies) is bound to 127.0.0.1 only; only the web panel and
-# SSH management are meant to be reached remotely.
+# Run as root on a systemd Linux server with apt-get, dnf, or pacman
+# (Debian/Ubuntu, Fedora, or Arch and their derivatives). Everything it
+# manages (the SOCKS proxies) is bound to 127.0.0.1 only; only the web
+# panel and SSH management are meant to be reached remotely.
 set -euo pipefail
+
+# detect_pkg_mgr echoes "apt", "dnf", or "pacman" for the package manager
+# found on this system, or returns non-zero if none of the three is
+# present — that's the concrete set of distro families this script knows
+# how to install packages / a firewall rule on. (A distro without systemd,
+# like Alpine, isn't supported regardless of package manager: the tunnel
+# units, journalctl-based status/log reading, and sudoers-scoped systemctl
+# control this whole project is built on all assume systemd is there.)
+detect_pkg_mgr() {
+  if command -v apt-get &>/dev/null; then
+    echo apt
+  elif command -v dnf &>/dev/null; then
+    echo dnf
+  elif command -v pacman &>/dev/null; then
+    echo pacman
+  else
+    return 1
+  fi
+}
 
 PREFIX=/opt/psi-panel
 ADMIN_DIR=/opt/regionhop-admin
@@ -22,6 +42,18 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+if ! command -v systemctl &>/dev/null; then
+  echo "This server has no systemd — regionhop's tunnel units, log reading, and" >&2
+  echo "privilege model all depend on it, so it isn't supported here." >&2
+  exit 1
+fi
+
+if ! PKG_MGR=$(detect_pkg_mgr); then
+  echo "No supported package manager found (looked for apt-get, dnf, pacman)." >&2
+  echo "regionhop supports Debian/Ubuntu, Fedora, and Arch (and their derivatives)." >&2
+  exit 1
+fi
+
 # Resolve SRC_DIR: if this script is run from a real checkout (has sibling
 # systemd/ and panel/ dirs), use that. If it's run standalone — e.g. via
 #   bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh)
@@ -32,7 +64,11 @@ if [[ -n "$_candidate" && -d "$_candidate/systemd" && -d "$_candidate/panel" ]];
   SRC_DIR="$_candidate"
 else
   if ! command -v git &>/dev/null; then
-    apt-get update -y && apt-get install -y --no-install-recommends git ca-certificates
+    case "$PKG_MGR" in
+      apt) apt-get update -y && apt-get install -y --no-install-recommends git ca-certificates ;;
+      dnf) dnf install -y git ca-certificates ;;
+      pacman) pacman -Sy --noconfirm git ca-certificates ;;
+    esac
   fi
   if [[ -d "$CHECKOUT_DIR/.git" ]]; then
     # This checkout only ever mirrors upstream master — nothing local is
@@ -54,7 +90,15 @@ fi
 
 ensure_user() {
   if ! id "$SERVICE_USER" &>/dev/null; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+    # nologin's path varies by distro (/usr/sbin on Debian, /sbin or
+    # /usr/sbin on Fedora, /usr/bin on Arch) and root's PATH doesn't always
+    # include sbin dirs, so check the concrete candidates directly instead
+    # of relying on `command -v`.
+    local nologin_shell=/bin/false
+    for candidate in /usr/sbin/nologin /sbin/nologin /usr/bin/nologin; do
+      [[ -x "$candidate" ]] && { nologin_shell="$candidate"; break; }
+    done
+    useradd --system --no-create-home --shell "$nologin_shell" "$SERVICE_USER"
   fi
   # Lets the panel (running as this unprivileged user) read `journalctl -u
   # psi-tunnel@<name>` for the Logs page — without this, journalctl refuses
@@ -175,14 +219,37 @@ fix_prefix_ownership() {
   fi
 }
 
+# detect_arch maps `uname -m` to the suffix used in this repo's release
+# bundle filenames (regionhop-linux-<suffix>.tar.gz). uname is universal
+# across every Linux distro, unlike Debian-specific `dpkg
+# --print-architecture`. Echoes nothing (and returns non-zero) for anything
+# we don't prebuild for, so callers fall back to building from source
+# instead of trying to download a bundle that doesn't exist.
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64) echo "amd64" ;;
+    aarch64) echo "arm64" ;;
+    armv7l | armv6l) echo "armv7" ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_go() {
   if command -v go &>/dev/null && go version | grep -q "go1\."; then
     return
   fi
   echo "Installing Go $GO_VERSION..."
-  local arch
-  arch=$(dpkg --print-architecture)
-  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${arch}.tar.gz" -o /tmp/go.tar.gz
+  # go.dev's own release archive names don't match detect_arch's suffixes
+  # (its 32-bit ARM build in particular is published as "armv6l", covering
+  # both v6 and v7 hardware in one build).
+  local goarch
+  case "$(detect_arch)" in
+    amd64) goarch=amd64 ;;
+    arm64) goarch=arm64 ;;
+    armv7) goarch=armv6l ;;
+    *) echo "No Go build available for this architecture ($(uname -m))." >&2; exit 1 ;;
+  esac
+  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${goarch}.tar.gz" -o /tmp/go.tar.gz
   rm -rf /usr/local/go
   tar -C /usr/local -xzf /tmp/go.tar.gz
   ln -sf /usr/local/go/bin/go /usr/local/bin/go
@@ -191,21 +258,17 @@ ensure_go() {
 }
 
 install_packages() {
-  apt-get update -y
-  apt-get install -y --no-install-recommends git curl ca-certificates ufw sudo
-}
-
-# detect_arch maps `dpkg --print-architecture`'s Debian arch names to the
-# suffix used in this repo's release bundle filenames
-# (regionhop-linux-<suffix>.tar.gz). Echoes nothing (and returns non-zero)
-# for anything we don't prebuild for, so callers fall back to building from
-# source instead of trying to download a bundle that doesn't exist.
-detect_arch() {
-  case "$(dpkg --print-architecture 2>/dev/null)" in
-    amd64) echo "amd64" ;;
-    arm64) echo "arm64" ;;
-    armhf) echo "armv7" ;;
-    *) return 1 ;;
+  case "$PKG_MGR" in
+    apt)
+      apt-get update -y
+      apt-get install -y --no-install-recommends git curl ca-certificates iptables sudo
+      ;;
+    dnf)
+      dnf install -y git curl ca-certificates iptables sudo
+      ;;
+    pacman)
+      pacman -Sy --noconfirm git curl ca-certificates iptables sudo
+      ;;
   esac
 }
 
@@ -301,10 +364,39 @@ remove_healthcheck() {
 setup_firewall() {
   # Defense-in-depth: SOCKS ports are already bound to 127.0.0.1 by config,
   # this just makes sure nothing external can ever reach that port range
-  # even if a future config change forgot to bind to loopback.
-  if command -v ufw &>/dev/null; then
-    ufw deny in proto tcp from any to any port 19000:19999 comment 'psi-socks local-only' || true
+  # even if a future config change forgot to bind to loopback. Uses
+  # iptables directly (installed by install_packages on every distro this
+  # script supports) instead of a distro-specific firewall manager
+  # (ufw/firewalld/etc.), so one code path covers all of them. A raw
+  # iptables rule doesn't otherwise survive a reboot, so a small systemd
+  # unit reapplies it at boot — idempotent via the -C check first, so it's
+  # safe to run on every boot rather than only the first.
+  if ! command -v iptables &>/dev/null; then
+    echo "WARNING: iptables not found, skipping the SOCKS-port firewall rule (SOCKS proxies are still bound to 127.0.0.1 only, by config)." >&2
+    return 0
   fi
+  iptables -C INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null \
+    || iptables -I INPUT -p tcp --dport 19000:19999 -j DROP
+
+  cat > /etc/systemd/system/regionhop-firewall.service <<'EOF'
+[Unit]
+Description=Reapply regionhop's SOCKS-port firewall rule (not persisted across reboots otherwise)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'iptables -C INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || iptables -I INPUT -p tcp --dport 19000:19999 -j DROP'
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now regionhop-firewall.service
+
+  # Best-effort cleanup of the ufw-based rule from installs before this
+  # switched to iptables directly — harmless no-op if ufw isn't present.
+  command -v ufw &>/dev/null && ufw delete deny in proto tcp from any to any port 19000:19999 2>/dev/null || true
 }
 
 random_port() {
@@ -517,12 +609,15 @@ uninstall_all() {
   [[ "$c" == "YES" ]] || { echo "Aborted."; return; }
   systemctl disable --now psi-panel.service 2>/dev/null || true
   systemctl disable --now psi-healthcheck.timer 2>/dev/null || true
+  systemctl disable --now regionhop-firewall.service 2>/dev/null || true
   for u in $(systemctl list-units --all 'psi-tunnel@*' --no-legend | awk '{print $1}'); do
     systemctl disable --now "$u" 2>/dev/null || true
   done
   rm -f /etc/systemd/system/psi-panel.service /etc/systemd/system/psi-tunnel@.service \
-        /etc/systemd/system/psi-healthcheck.service /etc/systemd/system/psi-healthcheck.timer
+        /etc/systemd/system/psi-healthcheck.service /etc/systemd/system/psi-healthcheck.timer \
+        /etc/systemd/system/regionhop-firewall.service
   systemctl daemon-reload
+  command -v iptables &>/dev/null && iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
   rm -f /etc/sudoers.d/regionhop-psipanel /etc/polkit-1/rules.d/49-regionhop.rules
   rm -rf "$PREFIX" "$ADMIN_DIR" /usr/local/bin/psictl
   userdel "$SERVICE_USER" 2>/dev/null || true
