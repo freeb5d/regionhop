@@ -55,7 +55,11 @@ a `psictl` command.
 
 ## Requirements
 
-- A Debian- or Ubuntu-based server with systemd, reachable over SSH as root (or a user who can `sudo`)
+- A Debian- or Ubuntu-based server with systemd, reachable over SSH as root (or a user who can `sudo`). Expected to work on:
+  - Debian 11 (Bullseye), 12 (Bookworm), and newer
+  - Ubuntu 20.04 LTS, 22.04 LTS, 24.04 LTS, and newer
+  - Any derivative of these with `apt`, `systemd`, and `dpkg` intact — e.g. Raspberry Pi OS (64-bit) on a Pi acting as the server
+  - Other systemd-based distros (Fedora, Arch, Alpine, etc.) aren't supported yet — the installer assumes `apt-get`/`ufw`/`dpkg` throughout
 - `amd64`, `arm64`, or `armv7` for the fast path (one prebuilt bundle, no Go needed at all); any other architecture falls back to installing Go and building both the panel and the core from source automatically — everything else in the install works the same either way
 - Your own Psiphon deployment config (see [Before you add a location](#before-you-add-a-location))
 
