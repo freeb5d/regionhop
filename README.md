@@ -43,6 +43,7 @@ lets you add, remove, start/stop, and watch logs for each region and see
 which one is actually connected; the same actions are available over SSH via
 a `psictl` command.
 
+- ⚡ **No Go install, one download** — the installer fetches one prebuilt file with everything already compiled (on `amd64`/`arm64`/`armv7`); nothing is built on your server, which matters a lot on slow or restricted networks where downloading a whole toolchain and compiling from source is the step most likely to fail
 - 🌍 **Multiple regions, one server** — spin up as many location tunnels as you want, each isolated in its own systemd unit
 - 🔒 **Local-only by design** — SOCKS ports are bound to loopback in the Psiphon config *and* blocked at the firewall as a second layer; nothing in the panel can expose them externally
 - 🖥 **Web panel** — bcrypt-hashed password, signed session cookies, login-attempt lockout, random listen port chosen at install time
