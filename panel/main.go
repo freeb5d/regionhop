@@ -46,12 +46,27 @@ var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
 }).ParseFS(templateFS, "templates/*.html"))
 
 const (
-	registryPath = "/opt/psi-panel/data/tunnels.json"
-	configsDir   = "/opt/psi-panel/configs"
-	dataDir      = "/opt/psi-panel/data"
-	portBase     = 19000
-	portMax      = 19999
+	registryPath    = "/opt/psi-panel/data/tunnels.json"
+	configsDir      = "/opt/psi-panel/configs"
+	dataDir         = "/opt/psi-panel/data"
+	coreVersionPath = "/opt/psi-panel/core/VERSION"
+	portBase        = 19000
+	portMax         = 19999
 )
+
+// coreVersion reads the short psiphon-tunnel-core commit hash that
+// ConsoleClient was built from, written alongside it at install time (see
+// install.sh's install_release/download_release_bundle). Returns "" if
+// unavailable — e.g. an install from before this existed — rather than
+// erroring, since it's cosmetic (shown in the footer) and nothing else
+// depends on it.
+func coreVersion() string {
+	b, err := os.ReadFile(coreVersionPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
 
 type app struct {
 	mu        sync.Mutex
@@ -245,6 +260,7 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"Tunnels":         rows,
 		"Regions":         regions,
 		"CurrentVersion":  CurrentVersion,
+		"CoreVersion":     coreVersion(),
 		"LatestVersion":   latest,
 		"UpdateAvailable": available,
 	}))

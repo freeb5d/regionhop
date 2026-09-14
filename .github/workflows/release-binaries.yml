@@ -38,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
+          CORE_VERSION=$(git -C psiphon-tunnel-core rev-parse --short HEAD)
           mkdir -p dist
           declare -A targets=( [amd64]="amd64" [arm64]="arm64" [armv7]="arm:7" )
           for name in "${!targets[@]}"; do
@@ -50,7 +51,8 @@ jobs:
             workdir=$(mktemp -d)
             (cd panel && go mod tidy && go build -ldflags "-X main.CurrentVersion=$VERSION" -o "$workdir/psi-panel" .)
             (cd psiphon-tunnel-core/ConsoleClient && go build -o "$workdir/ConsoleClient" .)
-            tar -czf "dist/regionhop-linux-${name}.tar.gz" -C "$workdir" psi-panel ConsoleClient
+            echo "$CORE_VERSION" > "$workdir/core-version.txt"
+            tar -czf "dist/regionhop-linux-${name}.tar.gz" -C "$workdir" psi-panel ConsoleClient core-version.txt
             rm -rf "$workdir"
           done
 
