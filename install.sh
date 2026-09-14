@@ -196,10 +196,10 @@ install_packages() {
 }
 
 # detect_arch maps `dpkg --print-architecture`'s Debian arch names to the
-# suffix used in this repo's release asset filenames (regionhop-{panel,core}
-# -linux-<suffix>). Echoes nothing (and returns non-zero) for anything we
-# don't prebuild for, so callers fall back to building from source instead
-# of trying to download a binary that doesn't exist.
+# suffix used in this repo's release bundle filenames
+# (regionhop-linux-<suffix>.tar.gz). Echoes nothing (and returns non-zero)
+# for anything we don't prebuild for, so callers fall back to building from
+# source instead of trying to download a bundle that doesn't exist.
 detect_arch() {
   case "$(dpkg --print-architecture 2>/dev/null)" in
     amd64) echo "amd64" ;;
@@ -207,41 +207,6 @@ detect_arch() {
     armhf) echo "armv7" ;;
     *) return 1 ;;
   esac
-}
-
-# download_release_binary fetches a prebuilt release asset for the detected
-# architecture into $dest, mode 0755 root:root. Returns non-zero (leaving
-# $dest untouched) if this architecture has no prebuilt binary or the
-# download fails, so callers can fall back to a source build.
-download_release_binary() {
-  local asset_prefix="$1" tag="$2" dest="$3" arch
-  arch=$(detect_arch) || return 1
-  local url="https://github.com/${REPO}/releases/download/${tag}/${asset_prefix}-linux-${arch}"
-  curl -fsSL "$url" -o "${dest}.new" || return 1
-  chmod 0755 "${dest}.new"
-  chown root:root "${dest}.new"
-  mv "${dest}.new" "$dest"
-}
-
-build_core() {
-  local tag
-  tag="v$(repo_version)"
-  echo "Fetching Psiphon core (ConsoleClient)..."
-  if download_release_binary "regionhop-core" "$tag" "$PREFIX/core/ConsoleClient"; then
-    echo "Core installed from prebuilt release binary ($tag)."
-  else
-    echo "No prebuilt core binary for this architecture/release, building from source instead..."
-    ensure_go
-    local build_dir=/tmp/psiphon-build
-    rm -rf "$build_dir"
-    git clone --depth 1 https://github.com/psiphon-labs/psiphon-tunnel-core.git "$build_dir"
-    (cd "$build_dir/ConsoleClient" && go build -o "$PREFIX/core/ConsoleClient" .)
-    chown root:root "$PREFIX/core/ConsoleClient"
-    chmod 0755 "$PREFIX/core/ConsoleClient"
-  fi
-  echo "Core installed at $PREFIX/core/ConsoleClient"
-  echo
-  echo "NOTE: edit propagation/sponsor IDs via menu option 'Set Psiphon IDs' before adding locations."
 }
 
 repo_version() {
@@ -260,19 +225,56 @@ latest_release_tag() {
     | grep -o '"tag_name": *"[^"]*"' | head -1 | sed -E 's/.*"([^"]+)"$/\1/'
 }
 
-build_panel() {
+# download_release_bundle fetches the single per-architecture release
+# archive (regionhop-linux-<arch>.tar.gz, containing both the psi-panel and
+# ConsoleClient binaries) for the given tag and installs both into place,
+# root:root 0755. Returns non-zero, leaving both destinations untouched, if
+# this architecture has no prebuilt bundle or the download/extract fails,
+# so callers can fall back to a source build of whichever piece they need.
+download_release_bundle() {
+  local tag="$1" arch tmp
+  arch=$(detect_arch) || return 1
+  tmp=$(mktemp -d)
+  local url="https://github.com/${REPO}/releases/download/${tag}/regionhop-linux-${arch}.tar.gz"
+  if ! curl -fsSL "$url" -o "$tmp/bundle.tar.gz" || ! tar -xzf "$tmp/bundle.tar.gz" -C "$tmp"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if [[ ! -f "$tmp/psi-panel" || ! -f "$tmp/ConsoleClient" ]]; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  install -m 0755 -o root -g root "$tmp/psi-panel" "$PREFIX/panel/psi-panel"
+  install -m 0755 -o root -g root "$tmp/ConsoleClient" "$PREFIX/core/ConsoleClient"
+  rm -rf "$tmp"
+}
+
+# install_release installs both the panel and the core, together, from the
+# single prebuilt bundle for this regionhop release when one exists for the
+# server's architecture -- falling back to building each from source (and
+# installing Go, only in that case) when it doesn't.
+install_release() {
   local tag
   tag="v$(repo_version)"
-  if download_release_binary "regionhop-panel" "$tag" "$PREFIX/panel/psi-panel"; then
-    echo "Panel installed from prebuilt release binary ($tag)."
+  echo "Installing regionhop core + panel ($tag)..."
+  if download_release_bundle "$tag"; then
+    echo "Core + panel installed from the prebuilt release bundle."
   else
-    echo "No prebuilt panel binary for this architecture/release, building from source instead..."
+    echo "No prebuilt bundle for this architecture/release, building core + panel from source instead..."
     ensure_go
+    local build_dir=/tmp/psiphon-build
+    rm -rf "$build_dir"
+    git clone --depth 1 https://github.com/psiphon-labs/psiphon-tunnel-core.git "$build_dir"
+    (cd "$build_dir/ConsoleClient" && go build -o "$PREFIX/core/ConsoleClient" .)
+    chown root:root "$PREFIX/core/ConsoleClient"
+    chmod 0755 "$PREFIX/core/ConsoleClient"
     (cd "$SRC_DIR/panel" && go mod tidy && go build -ldflags "-X main.CurrentVersion=$(repo_version)" -o "$PREFIX/panel/psi-panel" .)
     chown root:root "$PREFIX/panel/psi-panel"
     chmod 0755 "$PREFIX/panel/psi-panel"
   fi
   echo "$(repo_version)" > "$VERSION_FILE"
+  echo
+  echo "NOTE: edit propagation/sponsor IDs via menu option 'Set Psiphon IDs' before adding locations."
 }
 
 install_units() {
@@ -503,11 +505,11 @@ self_update() {
   fi
   SRC_DIR="$CHECKOUT_DIR"
   ensure_user
-  build_panel
+  install_release
   install_units
   systemctl restart psi-panel 2>/dev/null || true
-  echo "Updated panel to $(repo_version)."
-  echo "Note: the Psiphon core (ConsoleClient) is not touched by 'update' — rerun 'Reinstall/rebuild core' from the menu if you want to pick up a newer core binary too."
+  echo "Updated core + panel to $(repo_version)."
+  echo "Note: already-running tunnel processes keep using the old core binary until you restart them (Restart from the panel, or 'psictl restart <name>') — the new one only takes effect on their next start."
 }
 
 uninstall_all() {
@@ -531,8 +533,7 @@ menu() {
   PS3=$'\nSelect an option: '
   options=(
     "Full setup (packages, core+panel, firewall, units)"
-    "Reinstall/rebuild core"
-    "Reinstall/rebuild panel"
+    "Reinstall/rebuild core + panel"
     "Set Psiphon PropagationChannelId/SponsorId"
     "Set/reset panel admin password"
     "Start/enable panel"
@@ -547,20 +548,19 @@ menu() {
     case $REPLY in
       1)
         install_packages; ensure_user; ensure_dirs
-        build_core; build_panel; install_units; setup_firewall
+        install_release; install_units; setup_firewall
         first_time_panel_setup; start_panel; install_psictl
         ;;
-      2) build_core ;;
-      3) ensure_user; build_panel; systemctl restart psi-panel 2>/dev/null || true ;;
-      4) set_psiphon_ids ;;
-      5) set_panel_password; systemctl restart psi-panel 2>/dev/null || true ;;
-      6) install_units; start_panel ;;
-      7) install_psictl ;;
-      8) status_all ;;
-      9) check_update || true ;;
-      10) self_update ;;
-      11) uninstall_all ;;
-      12) break ;;
+      2) ensure_user; install_release; systemctl restart psi-panel 2>/dev/null || true ;;
+      3) set_psiphon_ids ;;
+      4) set_panel_password; systemctl restart psi-panel 2>/dev/null || true ;;
+      5) install_units; start_panel ;;
+      6) install_psictl ;;
+      7) status_all ;;
+      8) check_update || true ;;
+      9) self_update ;;
+      10) uninstall_all ;;
+      11) break ;;
       *) echo "Invalid option" ;;
     esac
   done

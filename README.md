@@ -55,7 +55,7 @@ a `psictl` command.
 ## Requirements
 
 - A Debian- or Ubuntu-based server with systemd, reachable over SSH as root (or a user who can `sudo`)
-- `amd64`, `arm64`, or `armv7` for the fast path (prebuilt binaries, no Go needed at all); any other architecture falls back to installing Go and building both the panel and the core from source automatically — everything else in the install works the same either way
+- `amd64`, `arm64`, or `armv7` for the fast path (one prebuilt bundle, no Go needed at all); any other architecture falls back to installing Go and building both the panel and the core from source automatically — everything else in the install works the same either way
 - Your own Psiphon deployment config (see [Before you add a location](#before-you-add-a-location))
 
 ## Install
@@ -65,8 +65,8 @@ bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/insta
 ```
 
 This opens an interactive menu. For a first run, pick **1) Full setup** — it
-detects your server's architecture and downloads prebuilt binaries for both
-the panel and `psiphon-tunnel-core`'s `ConsoleClient` from the
+detects your server's architecture and downloads a single bundle containing
+both the panel and `psiphon-tunnel-core`'s `ConsoleClient` from the
 [latest release](https://github.com/freeb5d/regionhop/releases/latest) (no Go
 install needed on `amd64`/`arm64`/`armv7`; anything else falls back to
 installing Go and building both from source), installs the systemd units,
@@ -79,14 +79,16 @@ even tell a scanner anything is listening there — bare requests to the root
 path get a generic 404, same as any other unknown path.
 
 You can re-run the same command any time to reopen the menu (reinstall the
-core, rotate the password, check status, uninstall, etc.) — it's idempotent.
+core + panel, rotate the password, check status, uninstall, etc.) — it's
+idempotent.
 
-> Both the panel and `ConsoleClient` (Psiphon's own tunnel core) ship as
-> prebuilt `linux/amd64`, `linux/arm64`, and `linux/armv7` binaries in each
-> release, so installing either is just a download on those architectures.
-> Neither is rebuilt against a newer upstream source automatically — each
-> regionhop release pins the `ConsoleClient` version it ships, and `psictl
-> update` always installs that same pinned binary rather than fetching
+> Both the panel and `ConsoleClient` (Psiphon's own tunnel core) ship
+> together in one `regionhop-linux-<arch>.tar.gz` bundle per release, for
+> `amd64`, `arm64`, and `armv7` — installing either is just one download on
+> those architectures. Neither is rebuilt against a newer upstream source
+> automatically — each regionhop release pins the `ConsoleClient` version it
+> ships, and `psictl update` always installs that same pinned bundle rather
+> than fetching
 > Psiphon's latest source at install time.
 
 ## Before you add a location
@@ -158,11 +160,12 @@ or, without `psictl` installed:
 bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update
 ```
 
-Any of the three fetches the latest release, updates the panel (from the
-prebuilt binary when available), reinstalls the systemd units, and restarts
-the panel. None of them touch the already-built `ConsoleClient` — use
-**Rebuild core only** from the installer menu if you also want to rebuild
-the Psiphon core against its latest upstream source.
+Any of the three fetches the latest release, reinstalls both the core and
+the panel (from the prebuilt bundle when available), reinstalls the systemd
+units, and restarts the panel. Tunnels that were already running keep using
+the old core binary until you restart them — from the panel's **Restart**
+button or `psictl restart <name>` — since replacing the file on disk
+doesn't affect an already-running process.
 
 ## How it's laid out
 
