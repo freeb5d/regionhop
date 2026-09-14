@@ -84,7 +84,7 @@
       </table>
     </div>
     <div class="note" style="margin-top:1rem">
-      regionhop v{{.CurrentVersion}} — {{t .Lang "footer.credit"}}
+      regionhop v{{.CurrentVersion}}{{if .CoreVersion}} ({{tf .Lang "footer.core" .CoreVersion}}){{end}} — {{t .Lang "footer.credit"}}
     </div>
   </div>
 </div>

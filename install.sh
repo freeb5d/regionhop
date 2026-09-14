@@ -309,6 +309,10 @@ download_release_bundle() {
   fi
   install -m 0755 -o root -g root "$tmp/psi-panel" "$PREFIX/panel/psi-panel"
   install -m 0755 -o root -g root "$tmp/ConsoleClient" "$PREFIX/core/ConsoleClient"
+  # core-version.txt (the psiphon-tunnel-core commit it was built from,
+  # shown in the panel footer) is optional -- older release bundles don't
+  # have it, and its absence shouldn't fail the whole install.
+  [[ -f "$tmp/core-version.txt" ]] && install -m 0644 -o root -g root "$tmp/core-version.txt" "$PREFIX/core/VERSION"
   rm -rf "$tmp"
 }
 
@@ -331,6 +335,9 @@ install_release() {
     (cd "$build_dir/ConsoleClient" && go build -o "$PREFIX/core/ConsoleClient" .)
     chown root:root "$PREFIX/core/ConsoleClient"
     chmod 0755 "$PREFIX/core/ConsoleClient"
+    git -C "$build_dir" rev-parse --short HEAD > "$PREFIX/core/VERSION"
+    chown root:root "$PREFIX/core/VERSION"
+    chmod 0644 "$PREFIX/core/VERSION"
     (cd "$SRC_DIR/panel" && go mod tidy && go build -ldflags "-X main.CurrentVersion=$(repo_version)" -o "$PREFIX/panel/psi-panel" .)
     chown root:root "$PREFIX/panel/psi-panel"
     chmod 0755 "$PREFIX/panel/psi-panel"
