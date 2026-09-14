@@ -12,6 +12,8 @@ Web panel + SSH CLI. SOCKS proxies stay local to the box — always.
 [![Platform](https://img.shields.io/badge/platform-Debian%2FUbuntu%20(systemd)-informational)](install.sh)
 [![Release](https://img.shields.io/github/v/release/freeb5d/regionhop)](https://github.com/freeb5d/regionhop/releases/latest)
 
+![Dashboard](docs/screenshots/dashboard.png)
+
 </div>
 
 ---
