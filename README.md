@@ -9,7 +9,7 @@ Web panel + SSH CLI. SOCKS proxies stay local to the box — always.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/panel-Go-00ADD8)](panel)
-[![Platform](https://img.shields.io/badge/platform-Debian%2FUbuntu%20(systemd)-informational)](install.sh)
+[![Platform](https://img.shields.io/badge/platform-Debian%2FUbuntu%2FFedora%2FArch%20(systemd)-informational)](install.sh)
 [![Release](https://img.shields.io/github/v/release/freeb5d/regionhop)](https://github.com/freeb5d/regionhop/releases/latest)
 
 ![Dashboard](docs/screenshots/dashboard.png)
@@ -55,11 +55,13 @@ a `psictl` command.
 
 ## Requirements
 
-- A Debian- or Ubuntu-based server with systemd, reachable over SSH as root (or a user who can `sudo`). Expected to work on:
+- A systemd Linux server with `apt-get`, `dnf`, or `pacman`, reachable over SSH as root (or a user who can `sudo`). Expected to work on:
   - Debian 11 (Bullseye), 12 (Bookworm), and newer
   - Ubuntu 20.04 LTS, 22.04 LTS, 24.04 LTS, and newer
-  - Any derivative of these with `apt`, `systemd`, and `dpkg` intact — e.g. Raspberry Pi OS (64-bit) on a Pi acting as the server
-  - Other systemd-based distros (Fedora, Arch, Alpine, etc.) aren't supported yet — the installer assumes `apt-get`/`ufw`/`dpkg` throughout
+  - Fedora (current releases)
+  - Arch Linux (and Arch-based derivatives like Manjaro)
+  - Any derivative of the above with its package manager and systemd intact — e.g. Raspberry Pi OS (64-bit) on a Pi acting as the server
+  - **Not supported:** distros without systemd (e.g. Alpine, which uses OpenRC) — the tunnel units, journal-based status/log reading, and sudoers-scoped `systemctl` control this project is built on all assume systemd is present
 - `amd64`, `arm64`, or `armv7` for the fast path (one prebuilt bundle, no Go needed at all); any other architecture falls back to installing Go and building both the panel and the core from source automatically — everything else in the install works the same either way
 - Your own Psiphon deployment config (see [Before you add a location](#before-you-add-a-location))
 
