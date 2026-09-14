@@ -30,6 +30,11 @@
       <form method="post" action="{{url "/settings"}}">
         <div class="field">
           <label for="cfg">{{t .Lang "creds.label"}}</label>
+          <div class="actions" style="margin-bottom:0.5rem">
+            <button type="button" class="btn-ghost btn-sm" id="cfg-load-btn">{{t .Lang "creds.loadfile"}}</button>
+            <input type="file" id="cfg-file" accept=".json,application/json" hidden>
+            <span class="note" id="cfg-file-name"></span>
+          </div>
           <textarea id="cfg" name="config_json" autocomplete="off" rows="14" placeholder='{
   "PropagationChannelId": "...",
   "SponsorId": "...",
@@ -42,6 +47,28 @@
         </div>
         <button type="submit">{{t .Lang "creds.submit"}}</button>
       </form>
+      <script>
+      // Reads the chosen file entirely client-side and drops its text into
+      // the existing textarea — the file itself never goes anywhere except
+      // through the normal form submit below, so this needs no new
+      // server-side upload endpoint or handling.
+      (function () {
+        var btn = document.getElementById("cfg-load-btn");
+        var fileInput = document.getElementById("cfg-file");
+        var nameEl = document.getElementById("cfg-file-name");
+        var textarea = document.getElementById("cfg");
+        btn.addEventListener("click", function () { fileInput.click(); });
+        fileInput.addEventListener("change", function () {
+          var file = fileInput.files[0];
+          if (!file) return;
+          nameEl.textContent = file.name;
+          var reader = new FileReader();
+          reader.onload = function () { textarea.value = reader.result; };
+          reader.onerror = function () { nameEl.textContent = {{t .Lang "creds.loadfile.error"}}; };
+          reader.readAsText(file);
+        });
+      })();
+      </script>
       <div class="card-sub">
         {{t .Lang "creds.note1"}}<br><br>
         {{t .Lang "creds.note2"}}
