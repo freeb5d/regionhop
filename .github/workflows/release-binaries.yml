@@ -1,0 +1,77 @@
+name: Build and attach release binaries
+
+# Builds psi-panel and ConsoleClient for every architecture regionhop's
+# installer knows how to auto-detect (see install.sh's detect_arch), and
+# uploads them to the GitHub release matching the pushed tag. Runs on a
+# real Linux runner because ConsoleClient's dependencies (blake3,
+# psiphon-tls/fips140, etc.) use hand-written assembly that some Go
+# toolchains can't cross-compile reliably from other host OSes.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout regionhop
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Checkout psiphon-tunnel-core
+        uses: actions/checkout@v4
+        with:
+          repository: Psiphon-Labs/psiphon-tunnel-core
+          path: psiphon-tunnel-core
+
+      - name: Build psi-panel (all architectures)
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd panel
+          go mod tidy
+          declare -A targets=( [amd64]="amd64" [arm64]="arm64" [armv7]="arm:7" )
+          for name in "${!targets[@]}"; do
+            spec="${targets[$name]}"
+            goarch="${spec%%:*}"
+            goarm="${spec#*:}"
+            export CGO_ENABLED=0 GOOS=linux GOARCH="$goarch"
+            [[ "$goarch" == "arm" ]] && export GOARM="$goarm" || unset GOARM || true
+            go build -ldflags "-X main.CurrentVersion=$VERSION" \
+              -o "../regionhop-panel-linux-${name}" .
+          done
+
+      - name: Build ConsoleClient (all architectures)
+        run: |
+          set -euo pipefail
+          cd psiphon-tunnel-core/ConsoleClient
+          declare -A targets=( [amd64]="amd64" [arm64]="arm64" [armv7]="arm:7" )
+          for name in "${!targets[@]}"; do
+            spec="${targets[$name]}"
+            goarch="${spec%%:*}"
+            goarm="${spec#*:}"
+            export CGO_ENABLED=0 GOOS=linux GOARCH="$goarch"
+            [[ "$goarch" == "arm" ]] && export GOARM="$goarm" || unset GOARM || true
+            go build -o "../../regionhop-core-linux-${name}" .
+          done
+
+      - name: Upload binaries to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${GITHUB_REF_NAME}" \
+            regionhop-panel-linux-amd64 \
+            regionhop-panel-linux-arm64 \
+            regionhop-panel-linux-armv7 \
+            regionhop-core-linux-amd64 \
+            regionhop-core-linux-arm64 \
+            regionhop-core-linux-armv7 \
+            --clobber

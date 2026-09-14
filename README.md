@@ -55,7 +55,7 @@ a `psictl` command.
 ## Requirements
 
 - A Debian- or Ubuntu-based server with systemd, reachable over SSH as root (or a user who can `sudo`)
-- `amd64` for the fast path (prebuilt panel binary); other architectures fall back to building the panel from source automatically — everything else in the install works the same either way
+- `amd64`, `arm64`, or `armv7` for the fast path (prebuilt binaries, no Go needed at all); any other architecture falls back to installing Go and building both the panel and the core from source automatically — everything else in the install works the same either way
 - Your own Psiphon deployment config (see [Before you add a location](#before-you-add-a-location))
 
 ## Install
@@ -65,25 +65,29 @@ bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/insta
 ```
 
 This opens an interactive menu. For a first run, pick **1) Full setup** — it
-installs Go, downloads the prebuilt panel binary from the
-[latest release](https://github.com/freeb5d/regionhop/releases/latest) (falls
-back to building it from source if that's ever unavailable), builds
-`psiphon-tunnel-core`'s `ConsoleClient` from source, installs the systemd
-units, adds a firewall rule blocking external access to the SOCKS port range,
-and walks you through setting the panel's admin password. It prints the
-panel's URL at the end — including a random path prefix (e.g.
+detects your server's architecture and downloads prebuilt binaries for both
+the panel and `psiphon-tunnel-core`'s `ConsoleClient` from the
+[latest release](https://github.com/freeb5d/regionhop/releases/latest) (no Go
+install needed on `amd64`/`arm64`/`armv7`; anything else falls back to
+installing Go and building both from source), installs the systemd units,
+adds a firewall rule blocking external access to the SOCKS port range, and
+walks you through setting the panel's admin password. It prints the panel's
+URL at the end — including a random path prefix (e.g.
 `http://1.2.3.4:34521/a1b2c3d4e5f6/`), not just a random port. Save that
 whole URL; the bare port with no path won't work, and (deliberately) won't
 even tell a scanner anything is listening there — bare requests to the root
 path get a generic 404, same as any other unknown path.
 
-You can re-run the same command any time to reopen the menu (rebuild the
+You can re-run the same command any time to reopen the menu (reinstall the
 core, rotate the password, check status, uninstall, etc.) — it's idempotent.
 
-> The panel ships as a prebuilt `linux/amd64` binary in each release, so
-> installing it is just a download. `ConsoleClient` (Psiphon's own tunnel
-> core) is a much larger codebase and is always built from source on your
-> server during install/update.
+> Both the panel and `ConsoleClient` (Psiphon's own tunnel core) ship as
+> prebuilt `linux/amd64`, `linux/arm64`, and `linux/armv7` binaries in each
+> release, so installing either is just a download on those architectures.
+> Neither is rebuilt against a newer upstream source automatically — each
+> regionhop release pins the `ConsoleClient` version it ships, and `psictl
+> update` always installs that same pinned binary rather than fetching
+> Psiphon's latest source at install time.
 
 ## Before you add a location
 
