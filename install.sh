@@ -679,6 +679,7 @@ self_update() {
   ensure_user
   install_release
   install_units
+  [[ -e /usr/local/bin/psictl ]] && install_psictl
   systemctl restart psi-panel 2>/dev/null || true
   echo "Updated core + panel to $(repo_version)."
   echo "Note: already-running tunnel processes keep using the old core binary until you restart them (Restart from the panel, or 'psictl restart <name>') — the new one only takes effect on their next start."
