@@ -109,17 +109,34 @@ func wrapErr(out string, err error) error {
 
 func startTunnel(name string) error {
 	out, err := runSystemctlPrivileged("enable", "--now", unitName(name))
+	invalidateNoticeCache(name)
 	return wrapErr(out, err)
 }
 
 func stopTunnel(name string) error {
 	out, err := runSystemctlPrivileged("disable", "--now", unitName(name))
+	invalidateNoticeCache(name)
 	return wrapErr(out, err)
 }
 
 func restartTunnel(name string) error {
 	out, err := runSystemctlPrivileged("restart", unitName(name))
+	invalidateNoticeCache(name)
 	return wrapErr(out, err)
+}
+
+// invalidateNoticeCache drops any cached Tunnels/ConnectedServerRegion
+// lookups for a location — called right after start/stop/restart so the
+// dashboard's immediate post-action poll (see dashboard.html's
+// __regionhopPoll call) actually reflects the new state instead of serving
+// a pre-action value that's still within noticeCacheTTL. Without this, the
+// TTL cache added to fix the journalctl CPU cost (see latestNotice) made
+// every restart/stop look like it took up to noticeCacheTTL to take effect.
+func invalidateNoticeCache(name string) {
+	noticeCacheMu.Lock()
+	delete(noticeCache, name+"|Tunnels")
+	delete(noticeCache, name+"|ConnectedServerRegion")
+	noticeCacheMu.Unlock()
 }
 
 func tunnelStatus(name string) string {
