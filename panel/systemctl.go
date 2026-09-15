@@ -125,16 +125,14 @@ func restartTunnel(name string) error {
 	return wrapErr(out, err)
 }
 
-// invalidateNoticeCache drops any cached Tunnels/ConnectedServerRegion
-// lookups for a location — called right after start/stop/restart so the
-// dashboard's immediate post-action poll (see dashboard.html's
-// __regionhopPoll call) actually reflects the new state instead of serving
-// a pre-action value that's still within noticeCacheTTL. Without this, the
-// TTL cache added to fix the journalctl CPU cost (see latestNotice) made
-// every restart/stop look like it took up to noticeCacheTTL to take effect.
+// invalidateNoticeCache drops any cached ConnectedServerRegion lookup for a
+// location — called right after start/stop/restart so the dashboard's
+// immediate post-action poll (see dashboard.html's __regionhopPoll call)
+// doesn't keep showing a pre-action exit region that's still within
+// noticeCacheTTL. (Status itself no longer goes through this cache at all —
+// see latestTunnelsState — so there's nothing to invalidate for it.)
 func invalidateNoticeCache(name string) {
 	noticeCacheMu.Lock()
-	delete(noticeCache, name+"|Tunnels")
 	delete(noticeCache, name+"|ConnectedServerRegion")
 	noticeCacheMu.Unlock()
 }
@@ -179,18 +177,6 @@ type tunnelInfo struct {
 // "active" only once it's actually reported a connected tunnel, and
 // systemd's own state (inactive/failed/activating/...) when the unit isn't
 // running at all.
-//
-// Both connection state and exit region come from full-history
-// `journalctl --grep` lookups rather than a bounded recent-lines window:
-// psiphon-tunnel-core only emits {"noticeType":"Tunnels","data":{"count":N}}
-// when its connected-tunnel count actually *changes* — once, right after
-// connecting, not repeated afterward — same as the once-only
-// ConnectedServerRegion notice used for the exit region below. On a
-// long-running, stable tunnel that one "count > 0" notice scrolls out of
-// any fixed-size recent-window scan long before the tunnel itself would
-// ever disconnect, which previously made status show "connecting" forever
-// on any tunnel that had been up for more than a few dozen journal lines'
-// worth of housekeeping — active tunnels included.
 func tunnelStatusInfo(name string) tunnelInfo {
 	svcState := tunnelStatus(name)
 	if svcState != "active" {
@@ -200,12 +186,52 @@ func tunnelStatusInfo(name string) tunnelInfo {
 	return tunnelInfo{State: latestTunnelsState(name), Region: connectedServerRegion(name)}
 }
 
+// latestTunnelsState reads a small bounded recent-lines window (the same
+// call the Logs page already uses) instead of a full-history journalctl
+// --grep, and looks for the most recent of two notice types:
+// {"noticeType":"Tunnels","data":{"count":N}} (emitted once, only when the
+// connected-tunnel count *changes*) or {"noticeType":"TotalBytesTransferred"}
+// (emitted repeatedly, every ~5 minutes, but ONLY from inside
+// psiphon-tunnel-core's connected-tunnel operate loop -- so its mere
+// presence at all proves the tunnel was active as of that timestamp,
+// regardless of the byte count it reports).
+//
+// This used to be a full-history search for the Tunnels notice alone,
+// which is fine in principle (that notice really is only emitted once) but
+// broke in practice: confirmed in the field, on a busy server with several
+// tunnels and other software logging heavily, the journal rotates old
+// entries out over time, and once that one-time notice ages out there's no
+// way to recover it -- a tunnel that had been solidly connected for 40+
+// minutes with zero interruptions (confirmed via TotalBytesTransferred
+// climbing every 5 minutes) showed as permanently stuck on "connecting"
+// because the *original* connect-time notice was gone. Since
+// TotalBytesTransferred repeats for as long as the tunnel stays connected,
+// a bounded recent window will always contain fresh evidence for any
+// tunnel that's actually still up, with no full-journal scan needed at all.
 func latestTunnelsState(name string) string {
-	n, ok := latestNotice(name, "Tunnels")
-	if !ok {
+	out, err := tunnelLogs(name, 200)
+	if err != nil {
 		return "connecting"
 	}
-	if n.Data.Count > 0 {
+	var latest psiphonNotice
+	found := false
+	for _, line := range strings.Split(out, "\n") {
+		n, ok := parseNoticeLine(line)
+		if !ok || (n.NoticeType != "Tunnels" && n.NoticeType != "TotalBytesTransferred") {
+			continue
+		}
+		if !found || n.Timestamp > latest.Timestamp {
+			latest = n
+			found = true
+		}
+	}
+	if !found {
+		return "connecting"
+	}
+	if latest.NoticeType == "TotalBytesTransferred" {
+		return "active"
+	}
+	if latest.Data.Count > 0 {
 		return "active"
 	}
 	return "connecting"
