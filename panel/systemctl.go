@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -205,10 +206,34 @@ func parseNoticeLine(line string) (psiphonNotice, bool) {
 	return n, true
 }
 
+// noticeCacheTTL bounds how often latestNotice actually spawns journalctl
+// per (tunnel, notice type) pair. Without this, a full-history --grep scan
+// ran on every dashboard poll (every 3s) for every tunnel, twice over (once
+// for status, once for exit region) -- cheap on a fresh journal, but its
+// cost grows with journal size, and confirmed in the field as a real,
+// sustained double-digit-%CPU journalctl process on a server with several
+// long-running tunnels. Caching means a status/region change can lag by up
+// to this long before showing up, which is an acceptable trade for not
+// re-scanning the whole journal several times a second.
+const noticeCacheTTL = 15 * time.Second
+
+type noticeCacheEntry struct {
+	notice    psiphonNotice
+	found     bool
+	fetchedAt time.Time
+}
+
+var (
+	noticeCacheMu sync.Mutex
+	noticeCache   = map[string]noticeCacheEntry{}
+)
+
 // latestNotice returns the most recent notice of the given type for a
 // location, searched across the unit's full journal history (not a bounded
 // recent window — see tunnelStatusInfo's comment for why that matters for
-// once-only notices like Tunnels and ConnectedServerRegion).
+// once-only notices like Tunnels and ConnectedServerRegion), through a
+// short-lived cache (see noticeCacheTTL) so repeated callers within the TTL
+// share one journalctl invocation instead of each triggering their own.
 //
 // Deliberately does NOT trust journalctl's own output ordering to find
 // "most recent" — combined with --grep, journalctl has been observed to
@@ -221,6 +246,25 @@ func parseNoticeLine(line string) (psiphonNotice, bool) {
 // parsed and compared by that instead — correct regardless of what order
 // journalctl happens to print them in on any given system/version.
 func latestNotice(name, noticeType string) (psiphonNotice, bool) {
+	key := name + "|" + noticeType
+
+	noticeCacheMu.Lock()
+	if e, ok := noticeCache[key]; ok && time.Since(e.fetchedAt) < noticeCacheTTL {
+		noticeCacheMu.Unlock()
+		return e.notice, e.found
+	}
+	noticeCacheMu.Unlock()
+
+	notice, found := fetchLatestNotice(name, noticeType)
+
+	noticeCacheMu.Lock()
+	noticeCache[key] = noticeCacheEntry{notice: notice, found: found, fetchedAt: time.Now()}
+	noticeCacheMu.Unlock()
+
+	return notice, found
+}
+
+func fetchLatestNotice(name, noticeType string) (psiphonNotice, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "journalctl",
