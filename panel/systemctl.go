@@ -39,6 +39,24 @@ func runSystemctlPrivileged(args ...string) (string, error) {
 	return string(out), err
 }
 
+// sudoersRefreshScript regenerates /etc/sudoers.d/regionhop-psipanel from
+// the current tunnel registry — see install.sh's
+// install_sudoers_refresh_script for what it actually does and why:
+// listing each location's exact unit name rather than a psi-tunnel@*
+// wildcard, since some sudo builds reject any wildcard in a Cmnd_Alias
+// outright. Triggered here whenever a location is added or removed, so a
+// newly-added location's own control permission exists before startTunnel
+// is called for it, and a removed one's is dropped again.
+const sudoersRefreshScript = "/opt/regionhop-admin/refresh-sudoers.sh"
+
+func refreshSudoersRule() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sudo", "-n", sudoersRefreshScript)
+	out, err := cmd.CombinedOutput()
+	return wrapErr(string(out), err)
+}
+
 // Deliberately outside /opt/psi-panel: that whole tree is owned by the
 // unprivileged psipanel user this process runs as, and directory-write
 // permission (not file permission) is what governs delete/replace — a
