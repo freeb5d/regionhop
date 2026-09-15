@@ -601,7 +601,18 @@ install_psictl() {
   cat > /usr/local/bin/psictl <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-case "${1:-}" in
+usage() { echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-logs | panel-restart | update | check-update" >&2; }
+cmd="${1:-}"
+case "$cmd" in
+  start|stop|restart|logs)
+    if [ -z "${2:-}" ]; then
+      echo "psictl $cmd: missing <name>" >&2
+      usage
+      exit 1
+    fi
+    ;;
+esac
+case "$cmd" in
   list) systemctl list-units 'psi-tunnel@*' --no-pager ;;
   start) systemctl enable --now "psi-tunnel@$2" ;;
   stop) systemctl disable --now "psi-tunnel@$2" ;;
@@ -611,7 +622,7 @@ case "${1:-}" in
   panel-restart) systemctl restart psi-panel ;;
   update) bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update ;;
   check-update) bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) check-update ;;
-  *) echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-logs | panel-restart | update | check-update" ;;
+  *) usage; exit 1 ;;
 esac
 EOF
   chmod +x /usr/local/bin/psictl
