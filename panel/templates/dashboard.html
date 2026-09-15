@@ -87,9 +87,9 @@
           </td>
           <td>
             <div class="actions">
-              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">{{t $lang "action.restart"}}</button></form>
-              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">{{t $lang "action.stop"}}</button></form>
-              <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/remove" onsubmit="return confirm({{tf $lang "action.remove.confirm" .Name}});"><button class="btn-danger btn-sm" type="submit">{{t $lang "action.remove"}}</button></form>
+              <form class="inline js-tunnel-action" data-action="restart" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">{{t $lang "action.restart"}}</button></form>
+              <form class="inline js-tunnel-action" data-action="stop" method="post" action="{{url "/tunnels/"}}{{.Name}}/stop"><button class="btn-danger btn-sm" type="submit">{{t $lang "action.stop"}}</button></form>
+              <form class="inline js-tunnel-action" data-action="remove" data-confirm="{{tf $lang "action.remove.confirm" .Name}}" method="post" action="{{url "/tunnels/"}}{{.Name}}/remove"><button class="btn-danger btn-sm" type="submit">{{t $lang "action.remove"}}</button></form>
               <a class="btn btn-ghost btn-sm" href="{{url "/tunnels/"}}{{.Name}}/logs">{{t $lang "action.logs"}}</a>
             </div>
           </td>
@@ -100,6 +100,7 @@
         </tbody>
       </table>
     </div>
+    <template id="empty-row-template"><tr class="empty-row"><td colspan="8">{{t .Lang "table.empty"}}</td></tr></template>
     <div class="note" style="margin-top:1rem">
       regionhop v{{.CurrentVersion}}{{if .CoreVersion}} ({{tf .Lang "footer.core" .CoreVersion}}){{end}} — {{t .Lang "footer.credit"}}
     </div>
@@ -153,6 +154,46 @@
   if (document.querySelector("tr[data-tunnel]")) {
     setInterval(poll, 3000);
   }
+  window.__regionhopPoll = poll;
+})();
+
+// Restart/Stop/Remove — submitted via fetch instead of a normal form POST,
+// so clicking one only updates that row (or removes it) instead of
+// reloading the whole page. Falls back to a real navigation automatically
+// if JS is ever unavailable, since these stay real <form method="post">
+// elements underneath.
+(function () {
+  var errorMsg = {{t .Lang "action.error"}};
+
+  document.querySelectorAll(".js-tunnel-action").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var action = form.getAttribute("data-action");
+      var confirmMsg = form.getAttribute("data-confirm");
+      if (confirmMsg && !confirm(confirmMsg)) return;
+
+      var tr = form.closest("tr");
+      var buttons = form.querySelectorAll("button");
+      buttons.forEach(function (b) { b.disabled = true; });
+
+      fetch(form.action, { method: "POST", credentials: "same-origin" })
+        .then(function (r) {
+          if (!r.ok) return r.text().then(function (t) { throw new Error(t || r.status); });
+          if (action === "remove" && tr) {
+            var tbody = tr.parentNode;
+            tr.remove();
+            if (!tbody.querySelector("tr[data-tunnel]")) {
+              var tmpl = document.getElementById("empty-row-template");
+              if (tmpl) tbody.appendChild(tmpl.content.cloneNode(true));
+            }
+          } else if (window.__regionhopPoll) {
+            window.__regionhopPoll();
+          }
+        })
+        .catch(function (err) { alert(errorMsg + "\n\n" + err.message); })
+        .finally(function () { buttons.forEach(function (b) { b.disabled = false; }); });
+    });
+  });
 })();
 
 // Latency testing — strictly on-demand: nothing here runs unless the user
