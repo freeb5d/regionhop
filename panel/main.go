@@ -430,6 +430,37 @@ func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
 		out, _ := tunnelLogs(name, 200)
 		tmpl.ExecuteTemplate(w, "logs.html", withLang(r, map[string]any{"Name": name, "Logs": out}))
 		return
+	case "test":
+		// On-demand only — no timer, no background schedule. Runs entirely
+		// synchronously in this request: the caller (the dashboard's JS)
+		// waits for the result and shows it.
+		mode := r.URL.Query().Get("mode")
+		if mode != "tcp" && mode != "http" && mode != "real" {
+			http.Error(w, "invalid mode", 400)
+			return
+		}
+		list, err := loadRegistry(registryPath)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		var port int
+		found := false
+		for _, t := range list {
+			if t.Name == name {
+				port = t.SocksPort
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.NotFound(w, r)
+			return
+		}
+		result := runProbe(mode, fmt.Sprintf("127.0.0.1:%d", port))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+		return
 	case "restart":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)

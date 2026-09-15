@@ -233,6 +233,53 @@ button, .btn {
 .actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 form.inline { display: inline-flex; }
 
+/* Latency-test toolbar */
+.test-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+.mode-tabs {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mode-tabs button {
+  border: none;
+  border-radius: 0;
+  background: var(--card);
+  color: var(--text-muted);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+}
+.mode-tabs button:not(:last-child) { border-inline-end: 1px solid var(--border); }
+.mode-tabs button.active { background: var(--accent); color: #fff; }
+.mode-tabs button:hover:not(.active) { background: var(--border-soft); color: var(--text); }
+
+.check-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--border-soft);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+.check-btn:hover { background: var(--border); color: var(--text); }
+.check-btn.testing { color: var(--accent); animation: check-spin 0.8s linear infinite; }
+.check-btn svg { width: 15px; height: 15px; }
+
+@keyframes check-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Table */
 .table-wrap {
   background: var(--card);
