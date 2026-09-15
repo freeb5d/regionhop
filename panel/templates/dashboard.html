@@ -52,10 +52,21 @@
       <div class="card-sub">{{t .Lang "add.note"}}</div>
     </div>
 
+    {{if .Tunnels}}
+    <div class="test-toolbar">
+      <div class="mode-tabs" id="probe-mode-tabs">
+        <button type="button" data-mode="tcp">{{t .Lang "probe.mode.tcp"}}</button>
+        <button type="button" data-mode="http">{{t .Lang "probe.mode.http"}}</button>
+        <button type="button" data-mode="real" class="active">{{t .Lang "probe.mode.real"}}</button>
+      </div>
+      <button type="button" class="btn-sm" id="probe-test-all">{{t .Lang "probe.testall"}}</button>
+      <span class="note" title="{{t .Lang "probe.tooltip"}}">ⓘ</span>
+    </div>
+    {{end}}
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>{{t .Lang "table.name"}}</th><th>{{t .Lang "table.region"}}</th><th>{{t .Lang "table.socks"}}</th><th>{{t .Lang "table.status"}}</th><th>{{t .Lang "table.flag"}}</th><th>{{t .Lang "table.actions"}}</th></tr>
+          <tr><th>{{t .Lang "table.name"}}</th><th>{{t .Lang "table.region"}}</th><th>{{t .Lang "table.socks"}}</th><th>{{t .Lang "table.status"}}</th><th>{{t .Lang "table.flag"}}</th><th>{{t .Lang "probe.latency"}}</th><th>{{t .Lang "probe.check"}}</th><th>{{t .Lang "table.actions"}}</th></tr>
         </thead>
         <tbody>
         {{$lang := .Lang}}
@@ -68,6 +79,12 @@
           <td title="{{.ExitRegion}}" data-role="exit">
             {{if .ExitFlagURL}}<img src="{{.ExitFlagURL}}" alt="{{.ExitRegion}}" width="20" height="15" style="vertical-align:middle;border-radius:2px">{{else if eq .Status "active"}}<span class="note">…</span>{{else}}<span class="note">—</span>{{end}}
           </td>
+          <td class="mono" data-role="latency">—</td>
+          <td>
+            <button type="button" class="check-btn" data-role="check-btn" title="{{t $lang "probe.check"}}">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h7l-1 8 11-13h-7l1-7z"/></svg>
+            </button>
+          </td>
           <td>
             <div class="actions">
               <form class="inline" method="post" action="{{url "/tunnels/"}}{{.Name}}/restart"><button class="btn-muted btn-sm" type="submit">{{t $lang "action.restart"}}</button></form>
@@ -78,7 +95,7 @@
           </td>
         </tr>
         {{else}}
-        <tr class="empty-row"><td colspan="6">{{t .Lang "table.empty"}}</td></tr>
+        <tr class="empty-row"><td colspan="8">{{t .Lang "table.empty"}}</td></tr>
         {{end}}
         </tbody>
       </table>
@@ -135,6 +152,67 @@
 
   if (document.querySelector("tr[data-tunnel]")) {
     setInterval(poll, 3000);
+  }
+})();
+
+// Latency testing — strictly on-demand: nothing here runs unless the user
+// clicks something. TCP/HTTP/Real-delay probes happen synchronously inside
+// the request the click makes to /tunnels/<name>/test?mode=..., so there's
+// no client-side polling loop or background timer involved at all.
+(function () {
+  var tabsEl = document.getElementById("probe-mode-tabs");
+  if (!tabsEl) return; // no locations yet, toolbar isn't rendered
+
+  var mode = "real";
+  var timeoutMsg = {{t .Lang "probe.timeout"}};
+
+  tabsEl.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    mode = btn.getAttribute("data-mode");
+    tabsEl.querySelectorAll("button").forEach(function (b) { b.classList.toggle("active", b === btn); });
+  });
+
+  function testRow(tr) {
+    var name = tr.getAttribute("data-tunnel");
+    var latencyEl = tr.querySelector('[data-role="latency"]');
+    var btn = tr.querySelector('[data-role="check-btn"]');
+    btn.classList.add("testing");
+    btn.disabled = true;
+    latencyEl.textContent = "…";
+    latencyEl.removeAttribute("title");
+    return fetch({{url "/tunnels/"}} + encodeURIComponent(name) + "/test?mode=" + mode, {
+      method: "POST", credentials: "same-origin"
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.ok) {
+          latencyEl.textContent = res.latencyMs + " ms";
+        } else {
+          latencyEl.textContent = timeoutMsg;
+          latencyEl.title = res.error || "";
+        }
+      })
+      .catch(function () { latencyEl.textContent = timeoutMsg; })
+      .finally(function () {
+        btn.classList.remove("testing");
+        btn.disabled = false;
+      });
+  }
+
+  document.querySelectorAll('[data-role="check-btn"]').forEach(function (btn) {
+    btn.addEventListener("click", function () { testRow(btn.closest("tr")); });
+  });
+
+  var testAllBtn = document.getElementById("probe-test-all");
+  if (testAllBtn) {
+    testAllBtn.addEventListener("click", function () {
+      var rows = Array.prototype.slice.call(document.querySelectorAll("tr[data-tunnel]"));
+      testAllBtn.disabled = true;
+      rows.reduce(function (chain, tr) {
+        return chain.then(function () { return testRow(tr); });
+      }, Promise.resolve()).finally(function () { testAllBtn.disabled = false; });
+    });
   }
 })();
 </script>
