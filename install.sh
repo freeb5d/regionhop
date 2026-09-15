@@ -598,7 +598,15 @@ status_all() {
 }
 
 install_psictl() {
-  cat > /usr/local/bin/psictl <<'EOF'
+  # Written to a temp file and moved into place atomically: `psictl update`
+  # re-execs this very function while /usr/local/bin/psictl is still the
+  # running script, and rewriting that path in place would corrupt the
+  # interpreter's mid-read of its own file. A rename swaps the directory
+  # entry instead, so the already-open running process keeps reading its
+  # old (still-valid) inode to completion.
+  local tmp
+  tmp="$(mktemp /usr/local/bin/psictl.XXXXXX)"
+  cat > "$tmp" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 usage() { echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-logs | panel-restart | update | check-update" >&2; }
@@ -625,7 +633,8 @@ case "$cmd" in
   *) usage; exit 1 ;;
 esac
 EOF
-  chmod +x /usr/local/bin/psictl
+  chmod +x "$tmp"
+  mv -f "$tmp" /usr/local/bin/psictl
   echo "Installed 'psictl' — try: psictl list"
 }
 
