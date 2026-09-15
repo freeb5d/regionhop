@@ -118,35 +118,97 @@ setup_sudo_control() {
   # that a rule which works on one server silently no-ops on another
   # ("Interactive authentication required."); sudoers' command-matching
   # semantics are stable everywhere.
-  local systemctl_path
-  systemctl_path=$(command -v systemctl)
+  #
+  # Each location's exact unit name is enumerated in the sudoers rule
+  # rather than matched with a psi-tunnel@* wildcard — some sudo builds
+  # are compiled with --disable-wildcards and reject ANY wildcard in a
+  # Cmnd_Alias as a hard syntax error, which silently broke every
+  # tunnel-control action on those builds (the whole rule failed
+  # validation and visudo refused to install it at all, with no obvious
+  # symptom beyond "tunnels never connect" and empty journals for units
+  # that were never actually started). install_sudoers_refresh_script
+  # writes the script that does the actual enumeration/regeneration; it's
+  # run once here for the initial install, and the panel itself re-runs it
+  # via that same sudo NOPASSWD rule whenever a location is added or
+  # removed (see refreshSudoersRule in panel/systemctl.go), so the
+  # allowlist always matches the current registry.
 
   # Remove a stale polkit rule from earlier regionhop versions, if present.
   rm -f /etc/polkit-1/rules.d/49-regionhop.rules
 
   install_self_update_script
+  install_sudoers_refresh_script
+  "$ADMIN_DIR/refresh-sudoers.sh"
+}
 
-  local sudoers_file=/etc/sudoers.d/regionhop-psipanel
-  local tmp
-  tmp=$(mktemp)
-  cat > "$tmp" <<EOF
-# Managed by regionhop's install.sh — do not edit by hand, it is
-# regenerated on every install/update. Scoped to exactly the operations
-# the panel needs on exactly the units/scripts it's meant to control.
-Cmnd_Alias REGIONHOP_TUNNEL_ENABLE = $systemctl_path enable --now psi-tunnel@*
-Cmnd_Alias REGIONHOP_TUNNEL_DISABLE = $systemctl_path disable --now psi-tunnel@*
-Cmnd_Alias REGIONHOP_TUNNEL_RESTART = $systemctl_path restart psi-tunnel@*
-Cmnd_Alias REGIONHOP_PANEL_RESTART = $systemctl_path restart psi-panel
-Cmnd_Alias REGIONHOP_SELF_UPDATE = $ADMIN_DIR/self-update.sh
-$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE
+install_sudoers_refresh_script() {
+  # Root-owned, mode 0700 for the same reason self-update.sh is (see its
+  # own comment above): psipanel must never be able to alter what a
+  # sudo-triggered script actually does. The heredoc is fully quoted (no
+  # variable expansion at generation time) and the handful of install-time
+  # constants are substituted afterward via sed, to keep the generated
+  # script's own runtime variables (which must stay literal) unambiguous.
+  mkdir -p "$ADMIN_DIR"
+  chown root:root "$ADMIN_DIR"
+  chmod 0700 "$ADMIN_DIR"
+  local systemctl_path
+  systemctl_path=$(command -v systemctl)
+  cat > "$ADMIN_DIR/refresh-sudoers.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+REGISTRY="__REGISTRY__"
+SYSTEMCTL="__SYSTEMCTL__"
+ADMIN_DIR="__ADMIN_DIR__"
+SERVICE_USER="__SERVICE_USER__"
+SUDOERS_FILE=/etc/sudoers.d/regionhop-psipanel
+
+names=()
+if [[ -f "$REGISTRY" ]]; then
+  while IFS= read -r n; do names+=("$n"); done < <(grep -oP '"name"\s*:\s*"\K[a-z0-9][a-z0-9-]{1,30}(?=")' "$REGISTRY")
+fi
+# sudoers doesn't allow an empty Cmnd_Alias; "_none_" contains characters
+# validName() never allows in a real location name, so it can never
+# collide with one and is purely a placeholder for "no locations yet".
+[[ ${#names[@]} -eq 0 ]] && names=("_none_")
+
+enable_cmds="" disable_cmds="" restart_cmds=""
+for n in "${names[@]}"; do
+  enable_cmds+="${enable_cmds:+, }$SYSTEMCTL enable --now psi-tunnel@${n}.service"
+  disable_cmds+="${disable_cmds:+, }$SYSTEMCTL disable --now psi-tunnel@${n}.service"
+  restart_cmds+="${restart_cmds:+, }$SYSTEMCTL restart psi-tunnel@${n}.service"
+done
+
+tmp=$(mktemp)
+{
+  echo "# Managed by regionhop -- do not edit by hand. Regenerated whenever a"
+  echo "# location is added or removed, and on every install/update. Enumerates"
+  echo "# exact unit names instead of psi-tunnel@* -- some sudo builds reject a"
+  echo "# wildcarded Cmnd_Alias outright as a syntax error."
+  echo "Cmnd_Alias REGIONHOP_TUNNEL_ENABLE = $enable_cmds"
+  echo "Cmnd_Alias REGIONHOP_TUNNEL_DISABLE = $disable_cmds"
+  echo "Cmnd_Alias REGIONHOP_TUNNEL_RESTART = $restart_cmds"
+  echo "Cmnd_Alias REGIONHOP_PANEL_RESTART = $SYSTEMCTL restart psi-panel"
+  echo "Cmnd_Alias REGIONHOP_SELF_UPDATE = $ADMIN_DIR/self-update.sh"
+  echo "Cmnd_Alias REGIONHOP_SUDOERS_REFRESH = $ADMIN_DIR/refresh-sudoers.sh"
+  echo "$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE, REGIONHOP_SUDOERS_REFRESH"
+} > "$tmp"
+
+if visudo -c -f "$tmp" &>/dev/null; then
+  install -m 0440 -o root -g root "$tmp" "$SUDOERS_FILE"
+else
+  echo "regionhop: regenerated sudoers rule failed validation, not installing it" >&2
+  visudo -c -f "$tmp" >&2 || true
+fi
+rm -f "$tmp"
 EOF
-  if visudo -c -f "$tmp" &>/dev/null; then
-    install -m 0440 -o root -g root "$tmp" "$sudoers_file"
-  else
-    echo "WARNING: generated sudoers rule failed validation, not installing it. Panel start/stop/restart/update will not work until this is fixed." >&2
-    visudo -c -f "$tmp" >&2 || true
-  fi
-  rm -f "$tmp"
+  sed -i \
+    -e "s#__REGISTRY__#$REGISTRY#" \
+    -e "s#__SYSTEMCTL__#$systemctl_path#" \
+    -e "s#__ADMIN_DIR__#$ADMIN_DIR#" \
+    -e "s#__SERVICE_USER__#$SERVICE_USER#" \
+    "$ADMIN_DIR/refresh-sudoers.sh"
+  chown root:root "$ADMIN_DIR/refresh-sudoers.sh"
+  chmod 0700 "$ADMIN_DIR/refresh-sudoers.sh"
 }
 
 install_self_update_script() {

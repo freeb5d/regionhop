@@ -368,6 +368,14 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// Must happen before startTunnel: sudo only permits controlling units
+	// whose exact name is already in the sudoers rule (see
+	// refreshSudoersRule's comment), which for a brand-new location is
+	// only true after this regenerates it from the registry just saved
+	// above.
+	if err := refreshSudoersRule(); err != nil {
+		log.Printf("refresh sudoers for %s: %v", name, err)
+	}
 	if err := startTunnel(name); err != nil {
 		log.Printf("start %s: %v", name, err)
 	}
@@ -498,6 +506,9 @@ func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			saveRegistry(registryPath, out)
+		}
+		if err := refreshSudoersRule(); err != nil {
+			log.Printf("refresh sudoers after removing %s: %v", name, err)
 		}
 	default:
 		http.NotFound(w, r)

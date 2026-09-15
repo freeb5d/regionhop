@@ -210,11 +210,15 @@ On the server, everything lives under `/opt/psi-panel/`:
 - The panel process runs as an unprivileged `psipanel` system user. It has
   no standing root access. Everything it can do as root goes through one
   narrowly-scoped `sudoers` rule limited to exactly
-  `systemctl {enable --now|disable --now|restart} psi-tunnel@*`,
-  `systemctl restart psi-panel`, and executing one fixed, root-owned
-  `self-update.sh` (no arguments, exact path) for the **Update now**
-  button — nothing else on the box, and no open shell access, is reachable
-  through it.
+  `systemctl {enable --now|disable --now|restart}` on each location's own
+  unit by its exact name (enumerated explicitly, not a `psi-tunnel@*`
+  wildcard — some `sudo` builds are compiled without wildcard support and
+  reject one outright), `systemctl restart psi-panel`, and executing two
+  fixed, root-owned scripts (no arguments, exact paths): `self-update.sh`
+  for the **Update now** button, and `refresh-sudoers.sh`, which
+  regenerates that same per-location allowlist whenever a location is
+  added or removed — nothing else on the box, and no open shell access, is
+  reachable through it.
 - Each location's own systemd service additionally runs with
   `NoNewPrivileges`, `ProtectSystem=strict`, and a scoped `ReadWritePaths`.
 
