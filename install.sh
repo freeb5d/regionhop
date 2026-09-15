@@ -444,8 +444,17 @@ setup_firewall() {
     echo "WARNING: iptables not found, skipping the SOCKS-port firewall rule (SOCKS proxies are still bound to 127.0.0.1 only, by config)." >&2
     return 0
   fi
-  iptables -C INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null \
-    || iptables -I INPUT -p tcp --dport 19000:19999 -j DROP
+  # A local connection to 127.0.0.1 still traverses the INPUT chain via the
+  # lo interface, so a DROP on this port range with no interface qualifier
+  # blocks the panel/psictl/curl on the box itself from ever reaching the
+  # SOCKS ports it's supposed to be using -- confirmed in the field: a local
+  # `curl -x socks5h://127.0.0.1:<port>` timed out at the TCP connect stage
+  # with this rule in place. `! -i lo` scopes the DROP to non-loopback
+  # interfaces only, which is all this rule ever needed to cover anyway.
+  # Clean up any old unqualified rule from before this fix first.
+  iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
+  iptables -C INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null \
+    || iptables -I INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP
 
   cat > /etc/systemd/system/regionhop-firewall.service <<'EOF'
 [Unit]
@@ -454,7 +463,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'iptables -C INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || iptables -I INPUT -p tcp --dport 19000:19999 -j DROP'
+ExecStart=/bin/sh -c 'iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null; iptables -C INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null || iptables -I INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP'
 RemainAfterExit=true
 
 [Install]
@@ -688,6 +697,7 @@ self_update() {
   ensure_user
   install_release
   install_units
+  setup_firewall
   [[ -e /usr/local/bin/psictl ]] && install_psictl
   systemctl restart psi-panel 2>/dev/null || true
   echo "Updated core + panel to $(repo_version)."
@@ -707,7 +717,10 @@ uninstall_all() {
         /etc/systemd/system/psi-healthcheck.service /etc/systemd/system/psi-healthcheck.timer \
         /etc/systemd/system/regionhop-firewall.service
   systemctl daemon-reload
-  command -v iptables &>/dev/null && iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
+  if command -v iptables &>/dev/null; then
+    iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
+    iptables -D INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
+  fi
   rm -f /etc/sudoers.d/regionhop-psipanel /etc/polkit-1/rules.d/49-regionhop.rules
   rm -rf "$PREFIX" "$ADMIN_DIR" /usr/local/bin/psictl
   userdel "$SERVICE_USER" 2>/dev/null || true
