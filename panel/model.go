@@ -36,6 +36,7 @@ var regionCodes = map[string]string{
 	"SE": "Sweden",
 	"IE": "Ireland",
 	"ES": "Spain",
+	"TR": "Turkey",
 }
 
 func loadRegistry(path string) ([]Tunnel, error) {
