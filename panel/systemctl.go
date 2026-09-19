@@ -135,6 +135,10 @@ func invalidateNoticeCache(name string) {
 	noticeCacheMu.Lock()
 	delete(noticeCache, name+"|ConnectedServerRegion")
 	noticeCacheMu.Unlock()
+
+	statusCacheMu.Lock()
+	delete(statusCache, name)
+	statusCacheMu.Unlock()
 }
 
 func tunnelStatus(name string) string {
@@ -208,7 +212,48 @@ func tunnelStatusInfo(name string) tunnelInfo {
 // TotalBytesTransferred repeats for as long as the tunnel stays connected,
 // a bounded recent window will always contain fresh evidence for any
 // tunnel that's actually still up, with no full-journal scan needed at all.
+// statusCacheTTL bounds how often latestTunnelsState actually spawns a
+// journalctl subprocess per tunnel. Without this, the dashboard's 3-second
+// poll spawned one uncached `journalctl -n 200` (parsing 200 JSON lines)
+// per tunnel on every single poll -- the one lookup the journal-rotation fix
+// (see latestTunnelsState's own doc comment) left without a cache, and a
+// real, measurable CPU/subprocess cost on servers running several tunnels.
+// Set to twice the dashboard's 5-second poll interval, so roughly every
+// other poll is served from cache instead of spawning journalctl -- a
+// naturally-occurring state change (e.g. a tunnel dropping on its own) can
+// lag by up to this long before showing up, the same trade already accepted
+// for noticeCacheTTL below. invalidateNoticeCache clears this immediately
+// after start/stop/restart so user-triggered actions aren't delayed by it.
+const statusCacheTTL = 10 * time.Second
+
+type statusCacheEntry struct {
+	state     string
+	fetchedAt time.Time
+}
+
+var (
+	statusCacheMu sync.Mutex
+	statusCache   = map[string]statusCacheEntry{}
+)
+
 func latestTunnelsState(name string) string {
+	statusCacheMu.Lock()
+	if e, ok := statusCache[name]; ok && time.Since(e.fetchedAt) < statusCacheTTL {
+		statusCacheMu.Unlock()
+		return e.state
+	}
+	statusCacheMu.Unlock()
+
+	state := fetchLatestTunnelsState(name)
+
+	statusCacheMu.Lock()
+	statusCache[name] = statusCacheEntry{state: state, fetchedAt: time.Now()}
+	statusCacheMu.Unlock()
+
+	return state
+}
+
+func fetchLatestTunnelsState(name string) string {
 	out, err := tunnelLogs(name, 200)
 	if err != nil {
 		return "connecting"
