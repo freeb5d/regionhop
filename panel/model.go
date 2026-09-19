@@ -38,6 +38,18 @@ var regionCodes = map[string]string{
 	"ES": "Spain",
 	"FI": "Finland",
 	"AU": "Australia",
+	"IN": "India",
+	"ID": "Indonesia",
+	"MY": "Malaysia",
+	"PH": "Philippines",
+	"TH": "Thailand",
+	"KR": "South Korea",
+	"KZ": "Kazakhstan",
+	"AM": "Armenia",
+	"AZ": "Azerbaijan",
+	"AE": "United Arab Emirates",
+	"SA": "Saudi Arabia",
+	"KH": "Cambodia",
 }
 
 func loadRegistry(path string) ([]Tunnel, error) {
