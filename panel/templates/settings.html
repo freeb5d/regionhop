@@ -74,6 +74,42 @@
         {{t .Lang "creds.note2"}}
       </div>
     </div>
+
+    <div class="card">
+      <div class="page-header" style="margin-bottom:0.5rem">
+        <h1 style="font-size:1.1rem">{{t .Lang "backup.title"}}</h1>
+        <div class="desc">{{t .Lang "backup.desc"}}</div>
+      </div>
+
+      {{if .ImportResult}}
+      <div class="alert alert-success">
+        {{tf .Lang "backup.import.added" (len .ImportResult.Added)}}
+        {{if .ImportResult.Skipped}}<br>{{tf .Lang "backup.import.skipped" (len .ImportResult.Skipped)}}
+        <ul>{{range $name, $reason := .ImportResult.Skipped}}<li>{{$name}}: {{$reason}}</li>{{end}}</ul>
+        {{end}}
+      </div>
+      {{end}}
+
+      <div class="actions" style="gap:0.75rem">
+        <a class="btn-ghost btn-sm" href="{{url "/backup/export"}}">{{t .Lang "backup.export"}}</a>
+        <form class="inline" method="post" action="{{url "/backup/import"}}" enctype="multipart/form-data" id="backup-import-form">
+          <input type="file" name="backup_file" id="backup-file" accept=".json,application/json" required hidden>
+          <button type="button" class="btn-ghost btn-sm" id="backup-import-btn">{{t .Lang "backup.import"}}</button>
+        </form>
+      </div>
+      <div class="card-sub">{{t .Lang "backup.note"}}</div>
+      <script>
+      (function () {
+        var form = document.getElementById("backup-import-form");
+        var fileInput = document.getElementById("backup-file");
+        var btn = document.getElementById("backup-import-btn");
+        btn.addEventListener("click", function () { fileInput.click(); });
+        fileInput.addEventListener("change", function () {
+          if (fileInput.files[0]) form.submit();
+        });
+      })();
+      </script>
+    </div>
   </div>
 </div>
 </body></html>

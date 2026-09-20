@@ -120,6 +120,8 @@ func main() {
 	mux.HandleFunc(basePath+"/tunnels/add", a.requireAuth(a.handleAdd))
 	mux.HandleFunc(basePath+"/tunnels/", a.requireAuth(a.handleTunnelAction))
 	mux.HandleFunc(basePath+"/settings", a.requireAuth(a.handleSettings))
+	mux.HandleFunc(basePath+"/backup/export", a.requireAuth(a.handleBackupExport))
+	mux.HandleFunc(basePath+"/backup/import", a.requireAuth(a.handleBackupImport))
 	mux.HandleFunc(basePath+"/update", a.requireAuth(a.handleUpdateTrigger))
 
 	log.Printf("psi-panel listening on %s, base path %q (localhost-management; SOCKS ports stay bound to 127.0.0.1 independently)", listenAddr, basePath)
