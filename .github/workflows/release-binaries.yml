@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           cd panel
           go mod tidy
-          XRAY_BIN="$GITHUB_WORKSPACE/xray/amd64/xray" go test ./...
+          XRAY_BIN="$GITHUB_WORKSPACE/xray/amd64/xray" go test -v -count=1 ./...
 
       - name: Build psi-panel + ConsoleClient and pack per-architecture bundles
         run: |
