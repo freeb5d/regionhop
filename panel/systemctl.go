@@ -258,6 +258,41 @@ func fetchLatestTunnelsState(name string) string {
 	if err != nil {
 		return "connecting"
 	}
+	if state, ok := tunnelsStateFromLines(out); ok {
+		return state
+	}
+	// The one-time Tunnels notice can be pushed out of that window by
+	// heavy logging right after connect (confirmed with an upstream proxy,
+	// several minutes before the first TotalBytesTransferred). Fall back to
+	// searching only the unit's current run, so a notice from an earlier
+	// run can never make a restarting tunnel look connected.
+	if state, ok := currentRunTunnelsState(name); ok {
+		return state
+	}
+	return "connecting"
+}
+
+func currentRunTunnelsState(name string) (string, bool) {
+	id, _ := runSystemctl("show", "-p", "InvocationID", "--value", unitName(name))
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "journalctl",
+		"_SYSTEMD_INVOCATION_ID="+id,
+		"--grep", `"noticeType":"(Tunnels|TotalBytesTransferred)"`,
+		"-n", "5", "--no-pager").CombinedOutput()
+	if err != nil {
+		return "", false
+	}
+	return tunnelsStateFromLines(string(out))
+}
+
+// tunnelsStateFromLines picks the most recent Tunnels/TotalBytesTransferred
+// notice by its own timestamp; ok is false if there is none.
+func tunnelsStateFromLines(out string) (string, bool) {
 	var latest psiphonNotice
 	found := false
 	for _, line := range strings.Split(out, "\n") {
@@ -271,15 +306,12 @@ func fetchLatestTunnelsState(name string) string {
 		}
 	}
 	if !found {
-		return "connecting"
+		return "", false
 	}
-	if latest.NoticeType == "TotalBytesTransferred" {
-		return "active"
+	if latest.NoticeType == "TotalBytesTransferred" || latest.Data.Count > 0 {
+		return "active", true
 	}
-	if latest.Data.Count > 0 {
-		return "active"
-	}
-	return "connecting"
+	return "connecting", true
 }
 
 func parseNoticeLine(line string) (psiphonNotice, bool) {
