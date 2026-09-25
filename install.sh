@@ -190,7 +190,8 @@ tmp=$(mktemp)
   echo "Cmnd_Alias REGIONHOP_PANEL_RESTART = $SYSTEMCTL restart psi-panel"
   echo "Cmnd_Alias REGIONHOP_SELF_UPDATE = $ADMIN_DIR/self-update.sh"
   echo "Cmnd_Alias REGIONHOP_SUDOERS_REFRESH = $ADMIN_DIR/refresh-sudoers.sh"
-  echo "$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE, REGIONHOP_SUDOERS_REFRESH"
+  echo "Cmnd_Alias REGIONHOP_UPSTREAM = $SYSTEMCTL enable --now regionhop-upstream.service, $SYSTEMCTL disable --now regionhop-upstream.service, $SYSTEMCTL restart regionhop-upstream.service"
+  echo "$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE, REGIONHOP_SUDOERS_REFRESH, REGIONHOP_UPSTREAM"
 } > "$tmp"
 
 if visudo -c -f "$tmp" &>/dev/null; then
@@ -268,6 +269,7 @@ fix_prefix_ownership() {
   chown root:root "$PREFIX" "$PREFIX/core" "$PREFIX/panel" 2>/dev/null || true
   chmod 0755 "$PREFIX" "$PREFIX/core" "$PREFIX/panel" 2>/dev/null || true
   [[ -f "$PREFIX/core/ConsoleClient" ]] && { chown root:root "$PREFIX/core/ConsoleClient"; chmod 0755 "$PREFIX/core/ConsoleClient"; }
+  [[ -f "$PREFIX/core/xray" ]] && { chown root:root "$PREFIX/core/xray"; chmod 0755 "$PREFIX/core/xray"; }
   [[ -f "$PREFIX/panel/psi-panel" ]] && { chown root:root "$PREFIX/panel/psi-panel"; chmod 0755 "$PREFIX/panel/psi-panel"; }
   [[ -f "$PANEL_ENV" ]] && { chown root:root "$PANEL_ENV"; chmod 0600 "$PANEL_ENV"; }
   mkdir -p "$PREFIX/configs" "$PREFIX/data"
@@ -375,6 +377,11 @@ download_release_bundle() {
   # shown in the panel footer) is optional -- older release bundles don't
   # have it, and its absence shouldn't fail the whole install.
   [[ -f "$tmp/core-version.txt" ]] && install -m 0644 -o root -g root "$tmp/core-version.txt" "$PREFIX/core/VERSION"
+  # Xray powers the panel's optional V2Ray upstream mode; bundles from
+  # before that feature don't carry it, which just leaves that mode off.
+  if [[ -f "$tmp/xray" ]]; then
+    install -m 0755 -o root -g root "$tmp/xray" "$PREFIX/core/xray"
+  fi
   rm -rf "$tmp"
 }
 
@@ -412,7 +419,12 @@ install_release() {
 install_units() {
   cp "$SRC_DIR/systemd/psi-tunnel@.service" /etc/systemd/system/
   cp "$SRC_DIR/systemd/psi-panel.service" /etc/systemd/system/
+  cp "$SRC_DIR/systemd/regionhop-upstream.service" /etc/systemd/system/
   systemctl daemon-reload
+  # Pick up a newly installed xray binary if V2Ray upstream is in use.
+  if systemctl is-enabled --quiet regionhop-upstream.service 2>/dev/null; then
+    systemctl restart regionhop-upstream.service || true
+  fi
   remove_healthcheck
 }
 
@@ -710,12 +722,13 @@ uninstall_all() {
   systemctl disable --now psi-panel.service 2>/dev/null || true
   systemctl disable --now psi-healthcheck.timer 2>/dev/null || true
   systemctl disable --now regionhop-firewall.service 2>/dev/null || true
+  systemctl disable --now regionhop-upstream.service 2>/dev/null || true
   for u in $(systemctl list-units --all 'psi-tunnel@*' --no-legend | awk '{print $1}'); do
     systemctl disable --now "$u" 2>/dev/null || true
   done
   rm -f /etc/systemd/system/psi-panel.service /etc/systemd/system/psi-tunnel@.service \
         /etc/systemd/system/psi-healthcheck.service /etc/systemd/system/psi-healthcheck.timer \
-        /etc/systemd/system/regionhop-firewall.service
+        /etc/systemd/system/regionhop-firewall.service /etc/systemd/system/regionhop-upstream.service
   systemctl daemon-reload
   if command -v iptables &>/dev/null; then
     iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true

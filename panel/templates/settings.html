@@ -77,6 +77,47 @@
 
     <div class="card">
       <div class="page-header" style="margin-bottom:0.5rem">
+        <h1 style="font-size:1.1rem">{{t .Lang "upstream.title"}}</h1>
+        <div class="desc">{{t .Lang "upstream.desc"}}</div>
+      </div>
+      {{if .UpstreamSaved}}<div class="alert alert-success">{{t .Lang "upstream.saved"}}</div>{{end}}
+      {{if .UpstreamError}}<div class="alert alert-error">{{.UpstreamError}}</div>{{end}}
+      <form method="post" action="{{url "/settings/upstream"}}">
+        <div class="field">
+          <label for="upstream-mode">{{t .Lang "upstream.mode"}}</label>
+          <select id="upstream-mode" name="upstream_mode">
+            <option value="none" {{if eq .Upstream.Mode "none"}}selected{{end}}>{{t .Lang "upstream.mode.none"}}</option>
+            <option value="proxy" {{if eq .Upstream.Mode "proxy"}}selected{{end}}>{{t .Lang "upstream.mode.proxy"}}</option>
+            <option value="v2ray" {{if eq .Upstream.Mode "v2ray"}}selected{{end}} {{if not .XrayAvailable}}disabled{{end}}>{{t .Lang "upstream.mode.v2ray"}}{{if not .XrayAvailable}} — {{t .Lang "upstream.noxray"}}{{end}}</option>
+          </select>
+        </div>
+        <div class="field" id="upstream-proxy-field">
+          <label for="upstream-proxy">{{t .Lang "upstream.proxy.label"}}</label>
+          <input id="upstream-proxy" name="upstream_proxy_url" autocomplete="off" value="{{.Upstream.ProxyURL}}" placeholder="socks5://127.0.0.1:1080">
+        </div>
+        <div class="field" id="upstream-v2ray-field">
+          <label for="upstream-v2ray">{{t .Lang "upstream.v2ray.label"}}</label>
+          <textarea id="upstream-v2ray" name="upstream_v2ray" autocomplete="off" rows="5" placeholder="vless://... | vmess://... | trojan://... | ss://... | { Xray outbound JSON }">{{.Upstream.V2Ray}}</textarea>
+          {{if eq .Upstream.Mode "v2ray"}}<div class="note">{{t .Lang "upstream.service"}}: {{.UpstreamState}}</div>{{end}}
+        </div>
+        <button type="submit">{{t .Lang "upstream.submit"}}</button>
+      </form>
+      <div class="card-sub">{{t .Lang "upstream.note"}}</div>
+      <script>
+      (function () {
+        var mode = document.getElementById("upstream-mode");
+        function sync() {
+          document.getElementById("upstream-proxy-field").hidden = mode.value !== "proxy";
+          document.getElementById("upstream-v2ray-field").hidden = mode.value !== "v2ray";
+        }
+        mode.addEventListener("change", sync);
+        sync();
+      })();
+      </script>
+    </div>
+
+    <div class="card">
+      <div class="page-header" style="margin-bottom:0.5rem">
         <h1 style="font-size:1.1rem">{{t .Lang "backup.title"}}</h1>
         <div class="desc">{{t .Lang "backup.desc"}}</div>
       </div>

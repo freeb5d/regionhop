@@ -48,6 +48,7 @@ a `psictl` command.
 - 🔒 **Local-only by design** — SOCKS ports are bound to loopback in the Psiphon config *and* blocked at the firewall as a second layer; nothing in the panel can expose them externally
 - 🖥 **Web panel** — bcrypt-hashed password, signed session cookies, login-attempt lockout, random listen port chosen at install time
 - 📡 **Real connection status** — the dashboard shows *connecting* vs. *active* based on the tunnel's own notices, plus the exit region and flag once it lands
+- 🔀 **Upstream proxy** — on servers whose network blocks Psiphon, send every tunnel through a SOCKS/HTTP proxy or a V2Ray link (VLESS/VMess/Trojan/Shadowsocks, run by a bundled Xray) first — see [Upstream](#upstream)
 - ⌨️ **SSH-side control** — `psictl list|start|stop|restart|logs` for anyone who prefers the terminal
 - ⚙️ **systemd-native** — every tunnel and the panel itself are ordinary systemd services: `systemctl status`, `journalctl`, auto-restart on failure, all work as expected
 - 🔄 **Self-updating** — one command pulls the latest release and restarts the panel; the dashboard tells you when one's available
@@ -130,6 +131,21 @@ Once a location shows **active**, the dashboard's Exit column shows the
 Psiphon server region it actually landed on, with a flag. This comes from
 `psiphon-tunnel-core`'s own `ConnectedServerRegion` notice in the journal —
 no outbound requests, no third-party service involved.
+
+## Upstream
+
+If the server's own network blocks or throttles Psiphon, set an upstream on
+the **Psiphon config** page. Every location then connects to Psiphon through
+it, and running locations are restarted to pick up the change:
+
+- **SOCKS / HTTP proxy** — a URL like `socks5://127.0.0.1:1080` or
+  `http://user:pass@host:3128` (passed to Psiphon's own `UpstreamProxyUrl`).
+- **V2Ray** — paste a `vless://`, `vmess://`, `trojan://` or `ss://` link, or
+  an Xray outbound JSON. regionhop runs it with a bundled Xray
+  (`regionhop-upstream.service`) behind a SOCKS inbound on `127.0.0.1:18999`
+  only, and checks the config with `xray run -test` before applying it.
+
+The upstream is included in [backups](#updating) too.
 
 ## Managing it over SSH
 
