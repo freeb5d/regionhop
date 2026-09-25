@@ -120,6 +120,7 @@ func main() {
 	mux.HandleFunc(basePath+"/tunnels/add", a.requireAuth(a.handleAdd))
 	mux.HandleFunc(basePath+"/tunnels/", a.requireAuth(a.handleTunnelAction))
 	mux.HandleFunc(basePath+"/settings", a.requireAuth(a.handleSettings))
+	mux.HandleFunc(basePath+"/settings/upstream", a.requireAuth(a.handleUpstream))
 	mux.HandleFunc(basePath+"/backup/export", a.requireAuth(a.handleBackupExport))
 	mux.HandleFunc(basePath+"/backup/import", a.requireAuth(a.handleBackupImport))
 	mux.HandleFunc(basePath+"/update", a.requireAuth(a.handleUpdateTrigger))
@@ -401,7 +402,7 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed saving: "+err.Error(), 500)
 			return
 		}
-		a.creds = psiphonCreds{ConfigJSON: cfgJSON}
+		a.creds.ConfigJSON = cfgJSON
 		tmpl.ExecuteTemplate(w, "settings.html", withLang(r, credsTemplateData(a.creds, true, "")))
 		return
 	}
@@ -409,11 +410,42 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 	tmpl.ExecuteTemplate(w, "settings.html", withLang(r, credsTemplateData(a.creds, false, "")))
 }
 
+func (a *app) handleUpstream(w http.ResponseWriter, r *http.Request) {
+	setLangCookie(w, r)
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, urlFor("/settings"), http.StatusSeeOther)
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	s, err := normalizeUpstream(upstreamSettings{
+		Mode:     r.FormValue("upstream_mode"),
+		ProxyURL: r.FormValue("upstream_proxy_url"),
+		V2Ray:    r.FormValue("upstream_v2ray"),
+	})
+	if err == nil {
+		err = a.applyUpstream(s)
+	}
+	data := credsTemplateData(a.creds, false, "")
+	if err != nil {
+		data["Upstream"] = s // keep what the user typed
+		data["UpstreamError"] = err.Error()
+	} else {
+		data["UpstreamSaved"] = true
+	}
+	tmpl.ExecuteTemplate(w, "settings.html", withLang(r, data))
+}
+
 func credsTemplateData(c psiphonCreds, saved bool, errMsg string) map[string]any {
+	_, xrayErr := os.Stat(xrayBinary)
 	return map[string]any{
-		"ConfigJSON": c.ConfigJSON,
-		"Saved":      saved,
-		"Error":      errMsg,
+		"ConfigJSON":    c.ConfigJSON,
+		"Saved":         saved,
+		"Error":         errMsg,
+		"Upstream":      loadUpstream(),
+		"UpstreamState": upstreamServiceState(),
+		"XrayAvailable": xrayErr == nil,
 	}
 }
 

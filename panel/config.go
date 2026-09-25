@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,11 +26,36 @@ const extraConfigPath = "/opt/psi-panel/data/extra-config.json"
 // always win: no pasted JSON can move a SOCKS port off loopback or off the
 // port allocator's assignment.
 type psiphonCreds struct {
-	ConfigJSON string
+	ConfigJSON       string
+	UpstreamProxyURL string
 }
 
 func credsFromEnv() psiphonCreds {
-	return psiphonCreds{ConfigJSON: loadExtraConfigJSON()}
+	return psiphonCreds{ConfigJSON: loadExtraConfigJSON(), UpstreamProxyURL: loadUpstream().effectiveProxyURL()}
+}
+
+// validateUpstreamProxyURL accepts "" (disabled) or a scheme://[user:pass@]host:port
+// URL in one of the schemes psiphon-tunnel-core's UpstreamProxyUrl supports.
+func validateUpstreamProxyURL(s string) error {
+	if s == "" {
+		return nil
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	switch u.Scheme {
+	case "socks5", "socks4a", "http":
+	default:
+		return fmt.Errorf("scheme must be socks5://, socks4a:// or http://")
+	}
+	if u.Hostname() == "" || u.Port() == "" {
+		return fmt.Errorf("must include host and port, e.g. socks5://127.0.0.1:1080")
+	}
+	if u.Path != "" && u.Path != "/" || u.RawQuery != "" {
+		return fmt.Errorf("must not include a path or query")
+	}
+	return nil
 }
 
 func loadExtraConfigJSON() string {
@@ -88,6 +114,12 @@ func writeTunnelConfig(configsDir, dataDir string, t Tunnel, creds psiphonCreds)
 	setDefault(cfg, "DisableLocalHTTPProxy", true)
 	setDefault(cfg, "EmitDiagnosticNotices", true)
 	setDefault(cfg, "UseIndistinguishableTLS", true)
+
+	// The panel's own upstream setting wins over one in the pasted JSON;
+	// when unset, whatever the pasted JSON says (if anything) stands.
+	if creds.UpstreamProxyURL != "" {
+		cfg["UpstreamProxyUrl"] = creds.UpstreamProxyURL
+	}
 
 	// Protected: never overridable by pasted JSON.
 	cfg["EgressRegion"] = t.Region

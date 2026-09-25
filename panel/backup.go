@@ -26,6 +26,9 @@ type backupFile struct {
 	PanelVersion  string   `json:"panel_version"`
 	Tunnels       []Tunnel `json:"tunnels"`
 	ExtraConfig   string   `json:"extra_config_json"`
+	// Pointer so a backup made before upstream support existed (field
+	// absent) leaves the current server's upstream alone on import.
+	Upstream *upstreamSettings `json:"upstream,omitempty"`
 }
 
 // handleBackupExport streams the current registry + Psiphon config as a
@@ -34,6 +37,7 @@ func (a *app) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	list, err := loadRegistry(registryPath)
 	creds := a.creds
+	upstream := loadUpstream()
 	a.mu.Unlock()
 	if err != nil {
 		http.Error(w, "failed reading registry: "+err.Error(), 500)
@@ -46,6 +50,7 @@ func (a *app) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 		PanelVersion:  CurrentVersion,
 		Tunnels:       list,
 		ExtraConfig:   creds.ConfigJSON,
+		Upstream:      &upstream,
 	}
 	body, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
@@ -110,7 +115,19 @@ func (a *app) handleBackupImport(w http.ResponseWriter, r *http.Request) {
 		a.renderSettingsError(w, r, "backup: failed saving config: "+err.Error())
 		return
 	}
-	a.creds = psiphonCreds{ConfigJSON: b.ExtraConfig}
+	a.creds.ConfigJSON = b.ExtraConfig
+
+	// Before recreating locations, so their configs are written with it.
+	if b.Upstream != nil {
+		s, err := normalizeUpstream(*b.Upstream)
+		if err == nil {
+			err = a.applyUpstream(s)
+		}
+		if err != nil {
+			a.renderSettingsError(w, r, "backup: upstream: "+err.Error())
+			return
+		}
+	}
 
 	list, err := loadRegistry(registryPath)
 	if err != nil {
