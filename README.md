@@ -25,6 +25,7 @@ Web panel + SSH CLI. SOCKS proxies stay local to the box — always.
 - [Install](#install)
 - [Before you add a location](#before-you-add-a-location)
 - [Using it](#using-it)
+- [Available regions](#available-regions)
 - [Exit region](#exit-region)
 - [Managing it over SSH](#managing-it-over-ssh)
 - [Updating](#updating)
@@ -124,6 +125,61 @@ Open the panel URL printed at the end of setup, sign in, and:
 3. Watch the status badge go **connecting** → **active**, and the Exit
    column fill in with the region Psiphon actually landed on
 4. **Restart** / **Stop** / **Remove** / **Logs** per location, as needed
+
+## Available regions
+
+These are the regions you can pick when adding a location, plus **Any (no
+preference)**, which lets Psiphon choose.
+
+**Europe 🌍**
+
+| | Region | Code |
+|---|---|---|
+| 🇦🇹 | Austria | `AT` |
+| 🇧🇪 | Belgium | `BE` |
+| 🇧🇬 | Bulgaria | `BG` |
+| 🇨🇿 | Czechia | `CZ` |
+| 🇩🇰 | Denmark | `DK` |
+| 🇪🇪 | Estonia | `EE` |
+| 🇫🇮 | Finland | `FI` |
+| 🇫🇷 | France | `FR` |
+| 🇩🇪 | Germany | `DE` |
+| 🇮🇪 | Ireland | `IE` |
+| 🇮🇹 | Italy | `IT` |
+| 🇱🇹 | Lithuania | `LT` |
+| 🇳🇱 | Netherlands | `NL` |
+| 🇳🇴 | Norway | `NO` |
+| 🇵🇱 | Poland | `PL` |
+| 🇷🇴 | Romania | `RO` |
+| 🇷🇸 | Serbia | `RS` |
+| 🇪🇸 | Spain | `ES` |
+| 🇸🇪 | Sweden | `SE` |
+| 🇨🇭 | Switzerland | `CH` |
+| 🇬🇧 | United Kingdom | `GB` |
+
+**Asia 🌏**
+
+| | Region | Code |
+|---|---|---|
+| 🇮🇳 | India | `IN` |
+| 🇮🇩 | Indonesia | `ID` |
+| 🇯🇵 | Japan | `JP` |
+| 🇸🇬 | Singapore | `SG` |
+
+**North America 🌎**
+
+| | Region | Code |
+|---|---|---|
+| 🇨🇦 | Canada | `CA` |
+| 🇺🇸 | United States | `US` |
+
+**Oceania 🌏**
+
+| | Region | Code |
+|---|---|---|
+| 🇦🇺 | Australia | `AU` |
+
+Psiphon picks the exit country only, not a specific city.
 
 ## Exit region
 
