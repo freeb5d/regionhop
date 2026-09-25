@@ -135,49 +135,49 @@ preference)**, which lets Psiphon choose.
 
 | | Region | Code |
 |---|---|---|
-| 🇦🇹 | Austria | `AT` |
-| 🇧🇪 | Belgium | `BE` |
-| 🇧🇬 | Bulgaria | `BG` |
-| 🇨🇿 | Czechia | `CZ` |
-| 🇩🇰 | Denmark | `DK` |
-| 🇪🇪 | Estonia | `EE` |
-| 🇫🇮 | Finland | `FI` |
-| 🇫🇷 | France | `FR` |
-| 🇩🇪 | Germany | `DE` |
-| 🇮🇪 | Ireland | `IE` |
-| 🇮🇹 | Italy | `IT` |
-| 🇱🇹 | Lithuania | `LT` |
-| 🇳🇱 | Netherlands | `NL` |
-| 🇳🇴 | Norway | `NO` |
-| 🇵🇱 | Poland | `PL` |
-| 🇷🇴 | Romania | `RO` |
-| 🇷🇸 | Serbia | `RS` |
-| 🇪🇸 | Spain | `ES` |
-| 🇸🇪 | Sweden | `SE` |
-| 🇨🇭 | Switzerland | `CH` |
-| 🇬🇧 | United Kingdom | `GB` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e6-1f1f9.svg" width="20" alt="AT"> | Austria | `AT` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e7-1f1ea.svg" width="20" alt="BE"> | Belgium | `BE` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e7-1f1ec.svg" width="20" alt="BG"> | Bulgaria | `BG` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e8-1f1ff.svg" width="20" alt="CZ"> | Czechia | `CZ` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e9-1f1f0.svg" width="20" alt="DK"> | Denmark | `DK` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ea-1f1ea.svg" width="20" alt="EE"> | Estonia | `EE` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1eb-1f1ee.svg" width="20" alt="FI"> | Finland | `FI` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1eb-1f1f7.svg" width="20" alt="FR"> | France | `FR` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e9-1f1ea.svg" width="20" alt="DE"> | Germany | `DE` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ee-1f1ea.svg" width="20" alt="IE"> | Ireland | `IE` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ee-1f1f9.svg" width="20" alt="IT"> | Italy | `IT` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f1-1f1f9.svg" width="20" alt="LT"> | Lithuania | `LT` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f3-1f1f1.svg" width="20" alt="NL"> | Netherlands | `NL` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f3-1f1f4.svg" width="20" alt="NO"> | Norway | `NO` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f5-1f1f1.svg" width="20" alt="PL"> | Poland | `PL` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f7-1f1f4.svg" width="20" alt="RO"> | Romania | `RO` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f7-1f1f8.svg" width="20" alt="RS"> | Serbia | `RS` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ea-1f1f8.svg" width="20" alt="ES"> | Spain | `ES` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f8-1f1ea.svg" width="20" alt="SE"> | Sweden | `SE` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e8-1f1ed.svg" width="20" alt="CH"> | Switzerland | `CH` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ec-1f1e7.svg" width="20" alt="GB"> | United Kingdom | `GB` |
 
 **Asia 🌏**
 
 | | Region | Code |
 |---|---|---|
-| 🇮🇳 | India | `IN` |
-| 🇮🇩 | Indonesia | `ID` |
-| 🇯🇵 | Japan | `JP` |
-| 🇸🇬 | Singapore | `SG` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ee-1f1f3.svg" width="20" alt="IN"> | India | `IN` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ee-1f1e9.svg" width="20" alt="ID"> | Indonesia | `ID` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1ef-1f1f5.svg" width="20" alt="JP"> | Japan | `JP` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1f8-1f1ec.svg" width="20" alt="SG"> | Singapore | `SG` |
 
 **North America 🌎**
 
 | | Region | Code |
 |---|---|---|
-| 🇨🇦 | Canada | `CA` |
-| 🇺🇸 | United States | `US` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e8-1f1e6.svg" width="20" alt="CA"> | Canada | `CA` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1fa-1f1f8.svg" width="20" alt="US"> | United States | `US` |
 
 **Oceania 🌏**
 
 | | Region | Code |
 |---|---|---|
-| 🇦🇺 | Australia | `AU` |
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e6-1f1fa.svg" width="20" alt="AU"> | Australia | `AU` |
 
 Psiphon picks the exit country only, not a specific city.
 
