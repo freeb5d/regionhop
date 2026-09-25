@@ -125,7 +125,8 @@ func applyUpstreamService(s upstreamSettings) error {
 	if err != nil {
 		return err
 	}
-	tmp := upstreamXrayConfig + ".tmp"
+	// Must end in .json: Xray picks the config format from the extension.
+	tmp := strings.TrimSuffix(upstreamXrayConfig, ".json") + ".new.json"
 	if err := os.WriteFile(tmp, body, 0o600); err != nil {
 		return err
 	}
