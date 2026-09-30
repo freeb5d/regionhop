@@ -273,21 +273,29 @@ func fetchLatestTunnelsState(name string) string {
 }
 
 func currentRunTunnelsState(name string) (string, bool) {
-	id, _ := runSystemctl("show", "-p", "InvocationID", "--value", unitName(name))
-	id = strings.TrimSpace(id)
+	id := currentInvocationID(name)
 	if id == "" {
 		return "", false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// -r starts from the newest entry and -n stops after a few matches, so
+	// this doesn't read the run's whole log once evidence is found.
 	out, err := exec.CommandContext(ctx, "journalctl",
 		"_SYSTEMD_INVOCATION_ID="+id,
 		"--grep", `"noticeType":"(Tunnels|TotalBytesTransferred)"`,
-		"-n", "5", "--no-pager").CombinedOutput()
+		"-r", "-n", "3", "--no-pager").CombinedOutput()
 	if err != nil {
 		return "", false
 	}
 	return tunnelsStateFromLines(string(out))
+}
+
+// currentInvocationID identifies the unit's current run ("" if none), so a
+// journal search can be limited to it instead of the unit's whole history.
+func currentInvocationID(name string) string {
+	id, _ := runSystemctl("show", "-p", "InvocationID", "--value", unitName(name))
+	return strings.TrimSpace(id)
 }
 
 // tunnelsStateFromLines picks the most recent Tunnels/TotalBytesTransferred
@@ -387,10 +395,15 @@ func latestNotice(name, noticeType string) (psiphonNotice, bool) {
 func fetchLatestNotice(name, noticeType string) (psiphonNotice, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "journalctl",
-		"-u", unitName(name),
-		"--grep", `"noticeType":"`+noticeType+`"`,
-		"-n", "5", "--no-pager")
+	// Limited to the current run when known (a previous run's notice would
+	// be stale anyway), newest-first with a small -n so the search stops
+	// early instead of scanning the unit's whole, ever-growing history.
+	scope := []string{"-u", unitName(name)}
+	if id := currentInvocationID(name); id != "" {
+		scope = []string{"_SYSTEMD_INVOCATION_ID=" + id}
+	}
+	args := append(scope, "--grep", `"noticeType":"`+noticeType+`"`, "-r", "-n", "3", "--no-pager")
+	cmd := exec.CommandContext(ctx, "journalctl", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return psiphonNotice{}, false

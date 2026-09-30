@@ -220,32 +220,46 @@ func (a *app) buildRows() ([]row, error) {
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 
-	rows := make([]row, 0, len(list))
-	for _, t := range list {
-		info := tunnelStatusInfo(t.Name)
-		class := "unknown"
-		switch info.State {
-		case "active":
-			class = "active"
-		case "connecting":
-			class = "connecting"
-		case "inactive", "failed":
-			class = "inactive"
-		}
-		rows = append(rows, row{
-			Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort,
-			Status: info.State, StatusClass: class,
-			ExitRegion: exitRegionLabel(info.Region), ExitFlagURL: flagImageURL(info.Region),
-		})
+	// Each location's check spawns systemctl/journalctl, so run a few at a
+	// time instead of strictly one after another: total time becomes roughly
+	// the slowest location's, not the sum of all of them.
+	rows := make([]row, len(list))
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	for i, t := range list {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, t Tunnel) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			info := tunnelStatusInfo(t.Name)
+			class := "unknown"
+			switch info.State {
+			case "active":
+				class = "active"
+			case "connecting":
+				class = "connecting"
+			case "inactive", "failed":
+				class = "inactive"
+			}
+			rows[i] = row{
+				Name: t.Name, Region: regionLabel(t.Region), SocksPort: t.SocksPort,
+				Status: info.State, StatusClass: class,
+				ExitRegion: exitRegionLabel(info.Region), ExitFlagURL: flagImageURL(info.Region),
+			}
+		}(i, t)
 	}
+	wg.Wait()
 	return rows, nil
 }
 
 func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	setLangCookie(w, r)
-	a.mu.Lock()
-	defer a.mu.Unlock()
 
+	// Deliberately not under a.mu: this only reads the registry file (which
+	// is replaced atomically) and slow per-location status lookups, and
+	// holding the global lock across them made add/remove/settings queue
+	// behind every page load and status poll.
 	rows, err := a.buildRows()
 	if err != nil {
 		http.Error(w, "failed to load tunnels: "+err.Error(), 500)
@@ -290,9 +304,7 @@ func (a *app) handleUpdateTrigger(w http.ResponseWriter, r *http.Request) {
 // page calls every few seconds to update status badges and exit flags in
 // place, without a full page reload.
 func (a *app) handleTunnelsStatus(w http.ResponseWriter, r *http.Request) {
-	a.mu.Lock()
 	rows, err := a.buildRows()
-	a.mu.Unlock()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
