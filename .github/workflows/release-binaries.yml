@@ -65,6 +65,33 @@ jobs:
           cd panel
           sudo env "PATH=$PATH" REGIONHOP_REAL_SYSTEMD=1 go test -v -count=1 -run TestRealSystemd ./...
 
+      - name: Firewall sync script test (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          must()    { grep -q -- "$1" <<<"$2" || { echo "MISSING: $1"; echo "$2"; exit 1; }; }
+          mustnot() { if grep -q -- "$1" <<<"$2"; then echo "UNEXPECTED: $1"; echo "$2"; exit 1; fi; }
+          work=$(mktemp -d)
+          # Extract the script exactly as install.sh embeds it.
+          awk '/sync-firewall\.sh" <<.EOF.$/{f=1;next} /^EOF$/{if(f){exit}} f' install.sh > "$work/sync.sh"
+          test -s "$work/sync.sh"
+          printf '[\n {"name":"a","region":"US","socks_port": 19013},\n {"name":"b","region":"DE","socks_port": 19002}\n]\n' > "$work/tunnels.json"
+          sed -i "s#__REGISTRY__#$work/tunnels.json#" "$work/sync.sh"
+          chmod +x "$work/sync.sh"
+          sudo "$work/sync.sh"; sudo "$work/sync.sh"   # twice: must be idempotent
+          rules=$(sudo iptables -S REGIONHOP-SOCKS); echo "$rules"
+          must '--dport 19013' "$rules"; must '--dport 19002' "$rules"
+          mustnot '--dport 19500' "$rules"
+          mustnot '19000:19999' "$(sudo iptables -S)"
+          jumps=$(sudo iptables -S INPUT | grep -c -- '-j REGIONHOP-SOCKS' || true)
+          [ "$jumps" = 1 ] || { echo "expected 1 jump, got $jumps"; exit 1; }
+          # A registry change must drop the stale rule and keep the other.
+          printf '[{"name":"a","region":"US","socks_port": 19013}]\n' > "$work/tunnels.json"
+          sudo "$work/sync.sh"
+          rules=$(sudo iptables -S REGIONHOP-SOCKS)
+          must '--dport 19013' "$rules"; mustnot '--dport 19002' "$rules"
+          echo "firewall sync OK"
+
       - name: Build psi-panel + ConsoleClient and pack per-architecture bundles
         run: |
           set -euo pipefail

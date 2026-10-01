@@ -201,6 +201,10 @@ else
   visudo -c -f "$tmp" >&2 || true
 fi
 rm -f "$tmp"
+
+# Keep the per-location SOCKS firewall rules in step with the registry too
+# (sync-firewall.sh is installed by setup_firewall; absent on very old setups).
+[[ -x "$ADMIN_DIR/sync-firewall.sh" ]] && "$ADMIN_DIR/sync-firewall.sh" || true
 EOF
   sed -i \
     -e "s#__REGISTRY__#$REGISTRY#" \
@@ -444,49 +448,72 @@ remove_healthcheck() {
 
 setup_firewall() {
   # Defense-in-depth: SOCKS ports are already bound to 127.0.0.1 by config,
-  # this just makes sure nothing external can ever reach that port range
-  # even if a future config change forgot to bind to loopback. Uses
-  # iptables directly (installed by install_packages on every distro this
-  # script supports) instead of a distro-specific firewall manager
-  # (ufw/firewalld/etc.), so one code path covers all of them. A raw
-  # iptables rule doesn't otherwise survive a reboot, so a small systemd
-  # unit reapplies it at boot — idempotent via the -C check first, so it's
-  # safe to run on every boot rather than only the first.
+  # this additionally drops outside traffic to each location's OWN SOCKS
+  # port, even if a future config change forgot to bind to loopback.
+  #
+  # It used to drop the whole 19000-19999 range, which also blocked other
+  # software on the same server that happens to use a port in it -- confirmed
+  # in the field with a 3x-ui panel that became unreachable while regionhop
+  # was installed. Rules are now per location port only, kept in step with
+  # the registry by sync-firewall.sh (run here, at boot, and whenever a
+  # location is added or removed), in a chain of their own so they never
+  # touch anyone else's rules.
+  #
+  # iptables is used directly (installed by install_packages on every distro
+  # this script supports) instead of a distro-specific firewall manager, so
+  # one code path covers all of them. Raw iptables rules don't survive a
+  # reboot, so regionhop-firewall.service re-runs the sync at boot.
   if ! command -v iptables &>/dev/null; then
-    echo "WARNING: iptables not found, skipping the SOCKS-port firewall rule (SOCKS proxies are still bound to 127.0.0.1 only, by config)." >&2
+    echo "WARNING: iptables not found, skipping the SOCKS-port firewall rules (SOCKS proxies are still bound to 127.0.0.1 only, by config)." >&2
     return 0
   fi
-  # A local connection to 127.0.0.1 still traverses the INPUT chain via the
-  # lo interface, so a DROP on this port range with no interface qualifier
-  # blocks the panel/psictl/curl on the box itself from ever reaching the
-  # SOCKS ports it's supposed to be using -- confirmed in the field: a local
-  # `curl -x socks5h://127.0.0.1:<port>` timed out at the TCP connect stage
-  # with this rule in place. `! -i lo` scopes the DROP to non-loopback
-  # interfaces only, which is all this rule ever needed to cover anyway.
-  # Clean up any old unqualified rule from before this fix first.
-  iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
-  iptables -C INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null \
-    || iptables -I INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP
+  # Remove the old range-wide rule from earlier versions, in both forms it
+  # has taken (with and without the loopback exception), and the ufw one.
+  while iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null; do :; done
+  while iptables -D INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null; do :; done
+  command -v ufw &>/dev/null && ufw delete deny in proto tcp from any to any port 19000:19999 2>/dev/null || true
 
-  cat > /etc/systemd/system/regionhop-firewall.service <<'EOF'
+  mkdir -p "$ADMIN_DIR"
+  chown root:root "$ADMIN_DIR"
+  chmod 0700 "$ADMIN_DIR"
+  cat > "$ADMIN_DIR/sync-firewall.sh" <<'EOF'
+#!/usr/bin/env bash
+# Managed by regionhop. Makes the REGIONHOP-SOCKS iptables chain contain one
+# rule per location's SOCKS port, dropping non-loopback TCP to it (loopback
+# traffic -- the panel, psictl, your own 3x-ui outbound -- is untouched).
+set -uo pipefail
+REGISTRY="__REGISTRY__"
+command -v iptables >/dev/null 2>&1 || exit 0
+CHAIN=REGIONHOP-SOCKS
+iptables -N "$CHAIN" 2>/dev/null || true
+iptables -F "$CHAIN"
+if [[ -f "$REGISTRY" ]]; then
+  while IFS= read -r port; do
+    iptables -A "$CHAIN" ! -i lo -p tcp --dport "$port" -j DROP
+  done < <(grep -oP '"socks_port"\s*:\s*\K[0-9]+' "$REGISTRY")
+fi
+iptables -C INPUT -j "$CHAIN" 2>/dev/null || iptables -I INPUT 1 -j "$CHAIN"
+EOF
+  sed -i -e "s#__REGISTRY__#$REGISTRY#" "$ADMIN_DIR/sync-firewall.sh"
+  chown root:root "$ADMIN_DIR/sync-firewall.sh"
+  chmod 0700 "$ADMIN_DIR/sync-firewall.sh"
+  "$ADMIN_DIR/sync-firewall.sh"
+
+  cat > /etc/systemd/system/regionhop-firewall.service <<EOF
 [Unit]
-Description=Reapply regionhop's SOCKS-port firewall rule (not persisted across reboots otherwise)
+Description=Reapply regionhop's per-location SOCKS port firewall rules (not persisted across reboots otherwise)
 After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null; iptables -C INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null || iptables -I INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP'
+ExecStart=$ADMIN_DIR/sync-firewall.sh
 RemainAfterExit=true
 
 [Install]
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  systemctl enable --now regionhop-firewall.service
-
-  # Best-effort cleanup of the ufw-based rule from installs before this
-  # switched to iptables directly — harmless no-op if ufw isn't present.
-  command -v ufw &>/dev/null && ufw delete deny in proto tcp from any to any port 19000:19999 2>/dev/null || true
+  systemctl enable regionhop-firewall.service
 }
 
 random_port() {
@@ -731,8 +758,11 @@ uninstall_all() {
         /etc/systemd/system/regionhop-firewall.service /etc/systemd/system/regionhop-upstream.service
   systemctl daemon-reload
   if command -v iptables &>/dev/null; then
-    iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
-    iptables -D INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null || true
+    while iptables -D INPUT -p tcp --dport 19000:19999 -j DROP 2>/dev/null; do :; done
+    while iptables -D INPUT ! -i lo -p tcp --dport 19000:19999 -j DROP 2>/dev/null; do :; done
+    while iptables -D INPUT -j REGIONHOP-SOCKS 2>/dev/null; do :; done
+    iptables -F REGIONHOP-SOCKS 2>/dev/null || true
+    iptables -X REGIONHOP-SOCKS 2>/dev/null || true
   fi
   rm -f /etc/sudoers.d/regionhop-psipanel /etc/polkit-1/rules.d/49-regionhop.rules
   rm -rf "$PREFIX" "$ADMIN_DIR" /usr/local/bin/psictl

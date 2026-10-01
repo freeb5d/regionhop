@@ -79,7 +79,7 @@ both the panel and `psiphon-tunnel-core`'s `ConsoleClient` from the
 [latest release](https://github.com/freeb5d/regionhop/releases/latest) (no Go
 install needed on `amd64`/`arm64`/`armv7`; anything else falls back to
 installing Go and building both from source), installs the systemd units,
-adds a firewall rule blocking external access to the SOCKS port range, and
+adds firewall rules blocking external access to each location's SOCKS port, and
 walks you through setting the panel's admin password. It prints the panel's
 URL at the end — including a random path prefix (e.g.
 `http://1.2.3.4:34521/a1b2c3d4e5f6/`), not just a random port. Save that
@@ -274,8 +274,12 @@ On the server, everything lives under `/opt/psi-panel/`:
   applied *after* merging your pasted Psiphon config, so nothing you paste
   in can move a SOCKS port off loopback — that guarantee doesn't depend on
   the content of your config at all.
-- A firewall rule additionally drops external traffic to the whole SOCKS
-  port range (19000–19999) as defense-in-depth, independent of the config.
+- Firewall rules additionally drop external traffic to each location's own
+  SOCKS port as defense-in-depth, independent of the config. They cover only
+  the ports regionhop itself assigned (kept in a dedicated `REGIONHOP-SOCKS`
+  iptables chain), so other software on the same server — a 3x-ui panel or
+  inbound that happens to use a port in 19000–19999, say — is never blocked.
+  New locations also skip any port something else is already listening on.
 - The panel itself: bcrypt password hash, HMAC-signed session cookies,
   `HttpOnly`/`SameSite=Strict` cookies, and a 5-attempt login lockout per
   IP. Every tunnel-manipulating route requires an authenticated session.

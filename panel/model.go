@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 )
@@ -54,6 +55,20 @@ var regionCodes = map[string]string{
 	"AU": "Australia",
 }
 
+// portAvailable reports whether nothing on this machine is listening on the
+// TCP port right now. regionhop shares its host with other software (3x-ui
+// panels and inbounds, notably, which pick random ports that can land in
+// 19000-19999), so a port not used by another location isn't necessarily
+// free. A variable so tests can substitute it.
+var portAvailable = func(p int) bool {
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", p))
+	if err != nil {
+		return false
+	}
+	l.Close()
+	return true
+}
+
 func loadRegistry(path string) ([]Tunnel, error) {
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -87,7 +102,7 @@ func findFreePort(existing []Tunnel, base, max int) (int, error) {
 		used[t.SocksPort] = true
 	}
 	for p := base; p <= max; p++ {
-		if !used[p] {
+		if !used[p] && portAvailable(p) {
 			return p, nil
 		}
 	}
