@@ -85,6 +85,21 @@ jobs:
           mustnot '19000:19999' "$(sudo iptables -S)"
           jumps=$(sudo iptables -S INPUT | grep -c -- '-j REGIONHOP-SOCKS' || true)
           [ "$jumps" = 1 ] || { echo "expected 1 jump, got $jumps"; exit 1; }
+          # Another program (not ConsoleClient) already listening on a location's
+          # port: that port must be left alone, and the clash reported.
+          python3 -m http.server 19002 --bind 0.0.0.0 >/dev/null 2>&1 &
+          srv=$!; sleep 1
+          sudo "$work/sync.sh"
+          rules=$(sudo iptables -S REGIONHOP-SOCKS)
+          must '--dport 19013' "$rules"; mustnot '--dport 19002' "$rules"
+          awk '/^warn_port_conflicts\(\) \{/{f=1} f{print} /^}/{if(f){exit}}' install.sh > "$work/fn.sh"
+          test -s "$work/fn.sh"
+          warn=$(sudo env REGISTRY="$work/tunnels.json" bash -c "source $work/fn.sh; warn_port_conflicts" 2>&1)
+          echo "$warn"
+          must "location 'b'" "$warn"; must '19002' "$warn"; mustnot "location 'a'" "$warn"
+          kill "$srv"; wait "$srv" 2>/dev/null || true
+          sudo "$work/sync.sh"
+          must '--dport 19002' "$(sudo iptables -S REGIONHOP-SOCKS)"   # blocked again once nothing else holds it
           # A registry change must drop the stale rule and keep the other.
           printf '[{"name":"a","region":"US","socks_port": 19013}]\n' > "$work/tunnels.json"
           sudo "$work/sync.sh"

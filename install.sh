@@ -446,6 +446,26 @@ remove_healthcheck() {
   rm -f "$PREFIX/healthcheck.sh" "$PREFIX/data/health.json"
 }
 
+# Tells the admin about any location whose saved SOCKS port is also being
+# used by a different program (a 3x-ui panel/inbound, say). Existing
+# locations keep their ports -- other configs may point at them -- so this
+# only reports; the fix is to remove and re-add that location, which picks
+# a port nothing else is using.
+warn_port_conflicts() {
+  command -v ss &>/dev/null || return 0
+  [[ -f "$REGISTRY" ]] || return 0
+  local port name holder
+  while IFS='|' read -r name port; do
+    holder=$(ss -ltnp "sport = :$port" 2>/dev/null | tail -n +2 | head -1)
+    [[ -z "$holder" || "$holder" == *ConsoleClient* ]] && continue
+    echo "WARNING: location '$name' uses SOCKS port $port, but another program is already listening on it:" >&2
+    echo "         $holder" >&2
+    echo "         Remove and re-add that location in the panel to give it a free port." >&2
+  done < <(paste -d'|' \
+    <(grep -oP '"name"\s*:\s*"\K[a-z0-9-]+(?=")' "$REGISTRY") \
+    <(grep -oP '"socks_port"\s*:\s*\K[0-9]+' "$REGISTRY"))
+}
+
 setup_firewall() {
   # Defense-in-depth: SOCKS ports are already bound to 127.0.0.1 by config,
   # this additionally drops outside traffic to each location's OWN SOCKS
@@ -489,6 +509,13 @@ iptables -N "$CHAIN" 2>/dev/null || true
 iptables -F "$CHAIN"
 if [[ -f "$REGISTRY" ]]; then
   while IFS= read -r port; do
+    # If some other program is already listening on this port, leave it
+    # reachable rather than blocking that program (see regionhop's
+    # warn_port_conflicts, which tells the admin about the clash).
+    holder=$(ss -ltnp "sport = :$port" 2>/dev/null | tail -n +2)
+    if [[ -n "$holder" && "$holder" != *ConsoleClient* ]]; then
+      continue
+    fi
     iptables -A "$CHAIN" ! -i lo -p tcp --dport "$port" -j DROP
   done < <(grep -oP '"socks_port"\s*:\s*\K[0-9]+' "$REGISTRY")
 fi
@@ -498,6 +525,7 @@ EOF
   chown root:root "$ADMIN_DIR/sync-firewall.sh"
   chmod 0700 "$ADMIN_DIR/sync-firewall.sh"
   "$ADMIN_DIR/sync-firewall.sh"
+  warn_port_conflicts
 
   cat > /etc/systemd/system/regionhop-firewall.service <<EOF
 [Unit]
