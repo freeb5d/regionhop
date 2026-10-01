@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -213,14 +214,53 @@ type row struct {
 // the full dashboard render and for the /tunnels-status polling endpoint
 // the page uses to pick up state changes (e.g. connecting -> active)
 // without a manual reload.
+//
+// The whole result is shared for rowsTTL: several open dashboards, or a page
+// load landing next to a poll, cost one computation instead of one each.
+// start/stop/restart/remove call invalidateRows so their follow-up poll is
+// always fresh.
+const rowsTTL = 3 * time.Second
+
+var (
+	rowsMu  sync.Mutex
+	rowsVal []row
+	rowsAt  time.Time
+	rowsGen atomic.Int64
+)
+
+func invalidateRows() { rowsGen.Add(1) }
+
 func (a *app) buildRows() ([]row, error) {
+	rowsMu.Lock()
+	defer rowsMu.Unlock()
+	gen := rowsGen.Load()
+	if rowsVal != nil && gen == rowsGenSeen && time.Since(rowsAt) < rowsTTL {
+		return rowsVal, nil
+	}
+	rows, err := a.computeRows()
+	if err != nil {
+		return nil, err
+	}
+	rowsVal, rowsAt, rowsGenSeen = rows, time.Now(), gen
+	return rows, nil
+}
+
+var rowsGenSeen int64
+
+func (a *app) computeRows() ([]row, error) {
 	list, err := loadRegistry(registryPath)
 	if err != nil {
 		return nil, err
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 
-	// Each location's check spawns systemctl/journalctl, so run a few at a
+	names := make([]string, len(list))
+	for i, t := range list {
+		names[i] = t.Name
+	}
+	states := loadUnitStates(names)
+
+	// The journal read per location is the expensive part, so run a few at a
 	// time instead of strictly one after another: total time becomes roughly
 	// the slowest location's, not the sum of all of them.
 	rows := make([]row, len(list))
@@ -232,7 +272,7 @@ func (a *app) buildRows() ([]row, error) {
 		go func(i int, t Tunnel) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			info := tunnelStatusInfo(t.Name)
+			info := tunnelStatusInfo(t.Name, states[t.Name])
 			class := "unknown"
 			switch info.State {
 			case "active":
@@ -553,6 +593,7 @@ func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
 			}
 			saveRegistry(registryPath, out)
 		}
+		invalidateRows()
 		if err := refreshSudoersRule(); err != nil {
 			log.Printf("refresh sudoers after removing %s: %v", name, err)
 		}

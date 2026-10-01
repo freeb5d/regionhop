@@ -125,20 +125,14 @@ func restartTunnel(name string) error {
 	return wrapErr(out, err)
 }
 
-// invalidateNoticeCache drops any cached ConnectedServerRegion lookup for a
-// location — called right after start/stop/restart so the dashboard's
-// immediate post-action poll (see dashboard.html's __regionhopPoll call)
-// doesn't keep showing a pre-action exit region that's still within
-// noticeCacheTTL. (Status itself no longer goes through this cache at all —
-// see latestTunnelsState — so there's nothing to invalidate for it.)
+// invalidateNoticeCache forgets everything cached about a location -- called
+// right after start/stop/restart so the dashboard's immediate post-action
+// poll shows the new state instead of a cached pre-action one.
 func invalidateNoticeCache(name string) {
-	noticeCacheMu.Lock()
-	delete(noticeCache, name+"|ConnectedServerRegion")
-	noticeCacheMu.Unlock()
-
-	statusCacheMu.Lock()
-	delete(statusCache, name)
-	statusCacheMu.Unlock()
+	runCacheMu.Lock()
+	delete(runCache, name)
+	runCacheMu.Unlock()
+	invalidateRows()
 }
 
 func tunnelStatus(name string) string {
@@ -160,166 +154,249 @@ func tunnelLogs(name string, lines int) (string, error) {
 
 type psiphonNotice struct {
 	NoticeType string `json:"noticeType"`
-	Timestamp  string `json:"timestamp"` // RFC3339; compared as a string to pick the truly most recent match, see latestNotice
+	Timestamp  string `json:"timestamp"` // RFC3339 with fixed-width fraction: compares correctly as a string
 	Data       struct {
 		Count  int    `json:"count"`
 		Region string `json:"serverRegion"`
 	} `json:"data"`
 }
 
-// tunnelInfo is what a single journal scan determines about a location:
-// its real connection state (not just whether systemd is running it) and,
-// once connected, which Psiphon server region it landed on.
+// tunnelInfo is what we know about a location right now: its real
+// connection state (not just whether systemd is running it) and, once
+// connected, which Psiphon server region it landed on.
 type tunnelInfo struct {
 	State  string // "active" (tunnel established), "connecting", or systemd's own state (inactive/failed/...)
 	Region string // 2-letter code from ConnectedServerRegion, once known
 }
 
-// tunnelStatusInfo reports what the process is actually doing, not just
-// whether systemd is running it, and which server region it's connected to.
-// "connecting" while ConsoleClient is still establishing a tunnel,
-// "active" only once it's actually reported a connected tunnel, and
-// systemd's own state (inactive/failed/activating/...) when the unit isn't
-// running at all.
-func tunnelStatusInfo(name string) tunnelInfo {
-	svcState := tunnelStatus(name)
-	if svcState != "active" {
-		return tunnelInfo{State: svcState}
-	}
-
-	return tunnelInfo{State: latestTunnelsState(name), Region: connectedServerRegion(name)}
+// unitState is systemd's view of one location's unit.
+type unitState struct {
+	Active       string // is-active value: active, inactive, failed, activating, ...
+	InvocationID string // identifies the unit's current run; changes on every (re)start
 }
 
-// latestTunnelsState reads a small bounded recent-lines window (the same
-// call the Logs page already uses) instead of a full-history journalctl
-// --grep, and looks for the most recent of two notice types:
-// {"noticeType":"Tunnels","data":{"count":N}} (emitted once, only when the
-// connected-tunnel count *changes*) or {"noticeType":"TotalBytesTransferred"}
-// (emitted repeatedly, every ~5 minutes, but ONLY from inside
-// psiphon-tunnel-core's connected-tunnel operate loop -- so its mere
-// presence at all proves the tunnel was active as of that timestamp,
-// regardless of the byte count it reports).
-//
-// This used to be a full-history search for the Tunnels notice alone,
-// which is fine in principle (that notice really is only emitted once) but
-// broke in practice: confirmed in the field, on a busy server with several
-// tunnels and other software logging heavily, the journal rotates old
-// entries out over time, and once that one-time notice ages out there's no
-// way to recover it -- a tunnel that had been solidly connected for 40+
-// minutes with zero interruptions (confirmed via TotalBytesTransferred
-// climbing every 5 minutes) showed as permanently stuck on "connecting"
-// because the *original* connect-time notice was gone. Since
-// TotalBytesTransferred repeats for as long as the tunnel stays connected,
-// a bounded recent window will always contain fresh evidence for any
-// tunnel that's actually still up, with no full-journal scan needed at all.
-// statusCacheTTL bounds how often latestTunnelsState actually spawns a
-// journalctl subprocess per tunnel. Without this, the dashboard's 3-second
-// poll spawned one uncached `journalctl -n 200` (parsing 200 JSON lines)
-// per tunnel on every single poll -- the one lookup the journal-rotation fix
-// (see latestTunnelsState's own doc comment) left without a cache, and a
-// real, measurable CPU/subprocess cost on servers running several tunnels.
-// Set to twice the dashboard's 5-second poll interval, so roughly every
-// other poll is served from cache instead of spawning journalctl -- a
-// naturally-occurring state change (e.g. a tunnel dropping on its own) can
-// lag by up to this long before showing up, the same trade already accepted
-// for noticeCacheTTL below. invalidateNoticeCache clears this immediately
-// after start/stop/restart so user-triggered actions aren't delayed by it.
-const statusCacheTTL = 10 * time.Second
+// loadUnitStates asks systemd about every location in ONE `systemctl show`
+// call (instead of one `is-active` plus one `show` per location), and
+// shares the answer for a few seconds between concurrent callers -- several
+// open dashboards, or a page load racing a poll.
+const unitStatesTTL = 3 * time.Second
 
-type statusCacheEntry struct {
-	state     string
-	fetchedAt time.Time
+var (
+	unitStatesMu  sync.Mutex
+	unitStatesAt  time.Time
+	unitStatesKey string
+	unitStatesVal map[string]unitState
+)
+
+func loadUnitStates(names []string) map[string]unitState {
+	key := strings.Join(names, ",")
+	unitStatesMu.Lock()
+	defer unitStatesMu.Unlock()
+	if key == unitStatesKey && time.Since(unitStatesAt) < unitStatesTTL {
+		return unitStatesVal
+	}
+	states := map[string]unitState{}
+	if len(names) > 0 {
+		args := []string{"show", "-p", "Id", "-p", "ActiveState", "-p", "InvocationID"}
+		for _, n := range names {
+			args = append(args, unitName(n))
+		}
+		out, _ := runSystemctl(args...)
+		states = parseUnitStates(out)
+	}
+	unitStatesKey, unitStatesAt, unitStatesVal = key, time.Now(), states
+	return states
+}
+
+// parseUnitStates reads `systemctl show` output for several units: one
+// block of Key=Value lines per unit, separated by blank lines. The result
+// is keyed by location name (unit prefix and .service suffix removed).
+func parseUnitStates(out string) map[string]unitState {
+	states := map[string]unitState{}
+	for _, block := range strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n\n") {
+		var id string
+		var st unitState
+		for _, line := range strings.Split(block, "\n") {
+			k, v, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			switch k {
+			case "Id":
+				id = v
+			case "ActiveState":
+				st.Active = v
+			case "InvocationID":
+				st.InvocationID = v
+			}
+		}
+		if name, ok := strings.CutSuffix(strings.TrimPrefix(id, unitPrefix), ".service"); ok && id != "" {
+			states[name] = st
+		}
+	}
+	return states
+}
+
+// tunnelStatusInfo reports what a location is actually doing, not just
+// whether systemd is running it: "connecting" while ConsoleClient is still
+// establishing a tunnel, "active" once it has reported a connected one, and
+// systemd's own state (inactive/failed/activating/...) when it isn't running.
+func tunnelStatusInfo(name string, st unitState) tunnelInfo {
+	if st.Active == "" {
+		return tunnelInfo{State: "unknown"}
+	}
+	if st.Active != "active" {
+		return tunnelInfo{State: st.Active}
+	}
+	state, region := tunnelRunInfo(name, st.InvocationID)
+	return tunnelInfo{State: state, Region: region}
+}
+
+// runInfo is the cached journal-derived answer for one run of one location.
+type runInfo struct {
+	invocationID string
+	state        string
+	region       string
+	fetchedAt    time.Time
 }
 
 var (
-	statusCacheMu sync.Mutex
-	statusCache   = map[string]statusCacheEntry{}
+	runCacheMu sync.Mutex
+	runCache   = map[string]runInfo{}
 )
 
-func latestTunnelsState(name string) string {
-	statusCacheMu.Lock()
-	if e, ok := statusCache[name]; ok && time.Since(e.fetchedAt) < statusCacheTTL {
-		statusCacheMu.Unlock()
-		return e.state
+// A connected tunnel rarely changes state, so it is re-read lazily; one that
+// is still connecting is re-read quickly so it flips to active promptly.
+// start/stop/restart clear the entry, and a restart also changes the
+// invocation ID, so neither waits for these.
+const (
+	runInfoTTLActive     = 30 * time.Second
+	runInfoTTLConnecting = 5 * time.Second
+)
+
+// tunnelRunInfo returns (state, exit region) for the unit's current run.
+// One bounded journal read feeds both. The region is a once-per-connection
+// notice that can scroll out of that window, so once found it is remembered
+// for the rest of the run instead of being searched for again.
+func tunnelRunInfo(name, invocationID string) (state, region string) {
+	runCacheMu.Lock()
+	e, ok := runCache[name]
+	sameRun := ok && e.invocationID == invocationID
+	if sameRun {
+		ttl := runInfoTTLConnecting
+		if e.state == "active" {
+			ttl = runInfoTTLActive
+		}
+		if time.Since(e.fetchedAt) < ttl {
+			runCacheMu.Unlock()
+			return e.state, e.region
+		}
 	}
-	statusCacheMu.Unlock()
+	prevRegion := ""
+	if sameRun {
+		prevRegion = e.region
+	}
+	runCacheMu.Unlock()
 
-	state := fetchLatestTunnelsState(name)
+	state, region = "connecting", ""
+	if out, err := tunnelLogs(name, 200); err == nil {
+		var found bool
+		state, region, found = scanNotices(out)
+		if !found {
+			// Heavy logging right after connect can push the one-time Tunnels
+			// notice out of the window; search just this run for evidence.
+			if s, ok := currentRunTunnelsState(invocationID); ok {
+				state = s
+			} else {
+				state = "connecting"
+			}
+		}
+	}
+	if region == "" {
+		region = prevRegion
+	}
+	if region == "" && state == "active" {
+		region = currentRunRegion(invocationID)
+	}
 
-	statusCacheMu.Lock()
-	statusCache[name] = statusCacheEntry{state: state, fetchedAt: time.Now()}
-	statusCacheMu.Unlock()
-
-	return state
+	runCacheMu.Lock()
+	runCache[name] = runInfo{invocationID: invocationID, state: state, region: region, fetchedAt: time.Now()}
+	runCacheMu.Unlock()
+	return state, region
 }
 
-func fetchLatestTunnelsState(name string) string {
-	out, err := tunnelLogs(name, 200)
-	if err != nil {
-		return "connecting"
-	}
-	if state, ok := tunnelsStateFromLines(out); ok {
-		return state
-	}
-	// The one-time Tunnels notice can be pushed out of that window by
-	// heavy logging right after connect (confirmed with an upstream proxy,
-	// several minutes before the first TotalBytesTransferred). Fall back to
-	// searching only the unit's current run, so a notice from an earlier
-	// run can never make a restarting tunnel look connected.
-	if state, ok := currentRunTunnelsState(name); ok {
-		return state
-	}
-	return "connecting"
-}
-
-func currentRunTunnelsState(name string) (string, bool) {
-	id := currentInvocationID(name)
-	if id == "" {
-		return "", false
+// journalGrep runs a newest-first, few-match search limited to one run.
+func journalGrep(invocationID, pattern string) string {
+	if invocationID == "" {
+		return ""
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// -r starts from the newest entry and -n stops after a few matches, so
-	// this doesn't read the run's whole log once evidence is found.
 	out, err := exec.CommandContext(ctx, "journalctl",
-		"_SYSTEMD_INVOCATION_ID="+id,
-		"--grep", `"noticeType":"(Tunnels|TotalBytesTransferred)"`,
-		"-r", "-n", "3", "--no-pager").CombinedOutput()
+		"_SYSTEMD_INVOCATION_ID="+invocationID,
+		"--grep", pattern, "-r", "-n", "3", "--no-pager").CombinedOutput()
 	if err != nil {
-		return "", false
+		return ""
 	}
-	return tunnelsStateFromLines(string(out))
+	return string(out)
 }
 
-// currentInvocationID identifies the unit's current run ("" if none), so a
-// journal search can be limited to it instead of the unit's whole history.
-func currentInvocationID(name string) string {
-	id, _ := runSystemctl("show", "-p", "InvocationID", "--value", unitName(name))
-	return strings.TrimSpace(id)
+func currentRunTunnelsState(invocationID string) (string, bool) {
+	state, _, found := scanNotices(journalGrep(invocationID, `"noticeType":"(Tunnels|TotalBytesTransferred)"`))
+	return state, found
 }
 
-// tunnelsStateFromLines picks the most recent Tunnels/TotalBytesTransferred
-// notice by its own timestamp; ok is false if there is none.
-func tunnelsStateFromLines(out string) (string, bool) {
+func currentRunRegion(invocationID string) string {
+	_, region, _ := scanNotices(journalGrep(invocationID, `"noticeType":"ConnectedServerRegion"`))
+	return region
+}
+
+// scanNotices reads journal text once and returns: the state implied by the
+// most recent Tunnels / TotalBytesTransferred notice (found=false if there
+// is none), and the region from the most recent ConnectedServerRegion.
+//
+// TotalBytesTransferred repeats every ~5 minutes but only from inside
+// psiphon-tunnel-core's connected-tunnel loop, so its mere presence proves
+// the tunnel was up -- unlike the Tunnels notice, which is emitted once per
+// change and can age out of the journal. Notices are compared by their own
+// timestamp rather than journalctl's output order, which is not reliable
+// with --grep. Lines are pre-filtered with a cheap substring test so the
+// many irrelevant log lines never reach the JSON decoder.
+func scanNotices(out string) (state, region string, found bool) {
 	var latest psiphonNotice
-	found := false
+	var latestRegion psiphonNotice
+	haveRegion := false
 	for _, line := range strings.Split(out, "\n") {
-		n, ok := parseNoticeLine(line)
-		if !ok || (n.NoticeType != "Tunnels" && n.NoticeType != "TotalBytesTransferred") {
+		wantState := strings.Contains(line, `"noticeType":"Tunnels"`) || strings.Contains(line, `"noticeType":"TotalBytesTransferred"`)
+		wantRegion := !wantState && strings.Contains(line, `"noticeType":"ConnectedServerRegion"`)
+		if !wantState && !wantRegion {
 			continue
 		}
-		if !found || n.Timestamp > latest.Timestamp {
-			latest = n
-			found = true
+		n, ok := parseNoticeLine(line)
+		if !ok {
+			continue
+		}
+		switch {
+		case wantRegion && n.NoticeType == "ConnectedServerRegion":
+			if !haveRegion || n.Timestamp > latestRegion.Timestamp {
+				latestRegion, haveRegion = n, true
+			}
+		case wantState && (n.NoticeType == "Tunnels" || n.NoticeType == "TotalBytesTransferred"):
+			if !found || n.Timestamp > latest.Timestamp {
+				latest, found = n, true
+			}
 		}
 	}
+	if haveRegion {
+		region = latestRegion.Data.Region
+	}
 	if !found {
-		return "", false
+		return "", region, false
 	}
 	if latest.NoticeType == "TotalBytesTransferred" || latest.Data.Count > 0 {
-		return "active", true
+		return "active", region, true
 	}
-	return "connecting", true
+	return "connecting", region, true
 }
 
 func parseNoticeLine(line string) (psiphonNotice, bool) {
@@ -332,108 +409,6 @@ func parseNoticeLine(line string) (psiphonNotice, bool) {
 		return psiphonNotice{}, false
 	}
 	return n, true
-}
-
-// noticeCacheTTL bounds how often latestNotice actually spawns journalctl
-// per (tunnel, notice type) pair. Without this, a full-history --grep scan
-// ran on every dashboard poll (every 3s) for every tunnel, twice over (once
-// for status, once for exit region) -- cheap on a fresh journal, but its
-// cost grows with journal size, and confirmed in the field as a real,
-// sustained double-digit-%CPU journalctl process on a server with several
-// long-running tunnels. Caching means a status/region change can lag by up
-// to this long before showing up, which is an acceptable trade for not
-// re-scanning the whole journal several times a second.
-const noticeCacheTTL = 15 * time.Second
-
-type noticeCacheEntry struct {
-	notice    psiphonNotice
-	found     bool
-	fetchedAt time.Time
-}
-
-var (
-	noticeCacheMu sync.Mutex
-	noticeCache   = map[string]noticeCacheEntry{}
-)
-
-// latestNotice returns the most recent notice of the given type for a
-// location, searched across the unit's full journal history (not a bounded
-// recent window — see tunnelStatusInfo's comment for why that matters for
-// once-only notices like Tunnels and ConnectedServerRegion), through a
-// short-lived cache (see noticeCacheTTL) so repeated callers within the TTL
-// share one journalctl invocation instead of each triggering their own.
-//
-// Deliberately does NOT trust journalctl's own output ordering to find
-// "most recent" — combined with --grep, journalctl has been observed to
-// print matches newest-first rather than the oldest-first order a plain
-// `journalctl -u <unit>` gives, and relying on that silently picked a STALE
-// match instead of the current one (e.g. an old "Tunnels":{"count":0} from
-// hours before a tunnel connected, overriding the current "count":1 and
-// showing "connecting" forever on a tunnel that was actually fine). Each
-// notice carries its own "timestamp" field, so every candidate line is
-// parsed and compared by that instead — correct regardless of what order
-// journalctl happens to print them in on any given system/version.
-func latestNotice(name, noticeType string) (psiphonNotice, bool) {
-	key := name + "|" + noticeType
-
-	noticeCacheMu.Lock()
-	if e, ok := noticeCache[key]; ok && time.Since(e.fetchedAt) < noticeCacheTTL {
-		noticeCacheMu.Unlock()
-		return e.notice, e.found
-	}
-	noticeCacheMu.Unlock()
-
-	notice, found := fetchLatestNotice(name, noticeType)
-
-	noticeCacheMu.Lock()
-	noticeCache[key] = noticeCacheEntry{notice: notice, found: found, fetchedAt: time.Now()}
-	noticeCacheMu.Unlock()
-
-	return notice, found
-}
-
-func fetchLatestNotice(name, noticeType string) (psiphonNotice, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	// Limited to the current run when known (a previous run's notice would
-	// be stale anyway), newest-first with a small -n so the search stops
-	// early instead of scanning the unit's whole, ever-growing history.
-	scope := []string{"-u", unitName(name)}
-	if id := currentInvocationID(name); id != "" {
-		scope = []string{"_SYSTEMD_INVOCATION_ID=" + id}
-	}
-	args := append(scope, "--grep", `"noticeType":"`+noticeType+`"`, "-r", "-n", "3", "--no-pager")
-	cmd := exec.CommandContext(ctx, "journalctl", args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return psiphonNotice{}, false
-	}
-	var latest psiphonNotice
-	found := false
-	for _, line := range strings.Split(string(out), "\n") {
-		n, ok := parseNoticeLine(line)
-		if !ok || n.NoticeType != noticeType {
-			continue
-		}
-		if !found || n.Timestamp > latest.Timestamp {
-			latest = n
-			found = true
-		}
-	}
-	return latest, found
-}
-
-// connectedServerRegion searches the whole journal for this unit for its
-// (single, one-time-per-connection) ConnectedServerRegion notice, returning
-// the most recent one. Uses journalctl's own indexed --grep instead of
-// pulling N lines client-side, so it stays cheap and correct no matter how
-// long the tunnel has been running or how noisy its log is.
-func connectedServerRegion(name string) string {
-	n, ok := latestNotice(name, "ConnectedServerRegion")
-	if !ok {
-		return ""
-	}
-	return n.Data.Region
 }
 
 // countryFlag turns a 2-letter ISO country code into its flag emoji by

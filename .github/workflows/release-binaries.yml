@@ -58,6 +58,13 @@ jobs:
           go mod tidy
           XRAY_BIN="$GITHUB_WORKSPACE/xray/amd64/xray" go test -v -count=1 ./...
 
+      - name: Real systemd/journalctl status test (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          cd panel
+          sudo env "PATH=$PATH" REGIONHOP_REAL_SYSTEMD=1 go test -v -count=1 -run TestRealSystemd ./...
+
       - name: Build psi-panel + ConsoleClient and pack per-architecture bundles
         run: |
           set -euo pipefail

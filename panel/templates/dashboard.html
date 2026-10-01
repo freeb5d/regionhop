@@ -151,8 +151,17 @@
       .catch(function () { /* transient failure, try again next tick */ });
   }
 
+  // Poll only while the tab is actually visible: a dashboard left open in a
+  // background tab all day used to keep the server running status checks for
+  // nobody. Coming back to the tab refreshes immediately.
+  var timer = null;
+  function startPolling() { if (!timer) timer = setInterval(poll, 5000); }
+  function stopPolling() { if (timer) { clearInterval(timer); timer = null; } }
   if (document.querySelector("tr[data-tunnel]")) {
-    setInterval(poll, 5000);
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) { stopPolling(); } else { poll(); startPolling(); }
+    });
+    if (!document.hidden) startPolling();
   }
   window.__regionhopPoll = poll;
 })();
