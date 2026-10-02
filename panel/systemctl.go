@@ -387,7 +387,7 @@ func scanNotices(out string) (state, region string, found bool) {
 			}
 		}
 	}
-	if haveRegion {
+	if haveRegion && validRegionCode(latestRegion.Data.Region) {
 		region = latestRegion.Data.Region
 	}
 	if !found {
@@ -397,6 +397,13 @@ func scanNotices(out string) (state, region string, found bool) {
 		return "active", region, true
 	}
 	return "connecting", region, true
+}
+
+// validRegionCode accepts only a two-letter uppercase code. The region comes
+// out of the tunnel process's log, so it is never trusted to be anything
+// else before it is shown on the dashboard.
+func validRegionCode(s string) bool {
+	return len(s) == 2 && s[0] >= 'A' && s[0] <= 'Z' && s[1] >= 'A' && s[1] <= 'Z'
 }
 
 func parseNoticeLine(line string) (psiphonNotice, bool) {

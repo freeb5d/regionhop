@@ -86,6 +86,7 @@ func (a *app) handleBackupImport(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	limitBody(w, r, 16<<20)
 
 	file, _, err := r.FormFile("backup_file")
 	if err != nil {

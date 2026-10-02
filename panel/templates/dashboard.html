@@ -133,13 +133,23 @@
     var exitEl = tr.querySelector('[data-role="exit"]');
     if (exitEl) {
       exitEl.title = row.ExitRegion || "";
+      exitEl.textContent = "";
+      // Built with DOM calls, never innerHTML: these values come from the
+      // tunnel's log output and must not be able to inject markup.
       if (row.ExitFlagURL) {
-        exitEl.innerHTML = '<img src="' + row.ExitFlagURL + '" alt="' + (row.ExitRegion || "") +
-          '" width="20" height="15" style="vertical-align:middle;border-radius:2px">';
-      } else if (row.Status === "active") {
-        exitEl.innerHTML = '<span class="note">…</span>';
+        var img = document.createElement("img");
+        img.src = row.ExitFlagURL;
+        img.alt = row.ExitRegion || "";
+        img.width = 20;
+        img.height = 15;
+        img.style.verticalAlign = "middle";
+        img.style.borderRadius = "2px";
+        exitEl.appendChild(img);
       } else {
-        exitEl.innerHTML = '<span class="note">—</span>';
+        var span = document.createElement("span");
+        span.className = "note";
+        span.textContent = row.Status === "active" ? "…" : "—";
+        exitEl.appendChild(span);
       }
     }
   }

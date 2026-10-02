@@ -570,7 +570,12 @@ set_panel_password() {
     return 1
   fi
   set_env_var PANEL_ADMIN_HASH "$hash"
-  echo "Password updated."
+  # Login cookies are signed with this secret and live for 12 hours, so
+  # without a new one anyone already holding a session (a stolen cookie, a
+  # forgotten browser) would stay logged in through a password change.
+  # Callers restart the panel afterwards, which is what applies it.
+  set_env_var PANEL_SESSION_SECRET "$(head -c 32 /dev/urandom | xxd -p -c 32)"
+  echo "Password updated. Existing panel logins will be signed out."
 }
 
 set_env_var() {

@@ -127,7 +127,46 @@ func main() {
 	mux.HandleFunc(basePath+"/update", a.requireAuth(a.handleUpdateTrigger))
 
 	log.Printf("psi-panel listening on %s, base path %q (localhost-management; SOCKS ports stay bound to 127.0.0.1 independently)", listenAddr, basePath)
-	log.Fatal(http.ListenAndServe(listenAddr, mux))
+	// Explicit timeouts: a bare http.ListenAndServe has none, so anyone who
+	// can reach the port could hold connections open forever (slowloris)
+	// and exhaust the panel's file descriptors without ever logging in.
+	// WriteTimeout is generous because a backup import starts every
+	// restored location before it responds.
+	srv := &http.Server{
+		Addr:              listenAddr,
+		Handler:           securityHeaders(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    16 << 10,
+	}
+	log.Fatal(srv.ListenAndServe())
+}
+
+// securityHeaders sets defensive headers on every response. The CSP only
+// restricts framing, <base>, form targets and plugins -- it deliberately
+// leaves script/style sources alone, since the pages use inline scripts.
+// no-referrer keeps the panel's address out of requests to the font and
+// flag CDNs; no-store keeps authenticated pages (and the backup download)
+// out of browser and proxy caches.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
+		if !strings.HasPrefix(r.URL.Path, basePath+"/static/") {
+			h.Set("Cache-Control", "no-store")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// limitBody caps how much of a request body the server will read.
+func limitBody(w http.ResponseWriter, r *http.Request, max int64) {
+	r.Body = http.MaxBytesReader(w, r.Body, max)
 }
 
 func envOr(k, def string) string {
@@ -174,6 +213,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		tmpl.ExecuteTemplate(w, "login.html", withLang(r, nil))
 		return
 	}
+	limitBody(w, r, 64<<10)
 	ip := clientIP(r)
 	if !a.sessions.allowAttempt(ip) {
 		tmpl.ExecuteTemplate(w, "login.html", withLang(r, map[string]any{"Error": t(currentLang(r), "login.error.locked")}))
@@ -380,6 +420,7 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	limitBody(w, r, 64<<10)
 	name := strings.TrimSpace(r.FormValue("name"))
 	region := strings.TrimSpace(r.FormValue("region"))
 
@@ -444,6 +485,7 @@ func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 
 	if r.Method == http.MethodPost {
+		limitBody(w, r, 1<<20)
 		cfgJSON := r.FormValue("config_json")
 
 		if err := validateExtraConfigJSON(cfgJSON); err != nil {
@@ -468,6 +510,7 @@ func (a *app) handleUpstream(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, urlFor("/settings"), http.StatusSeeOther)
 		return
 	}
+	limitBody(w, r, 1<<20)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

@@ -24,6 +24,7 @@ type sessionStore struct {
 type loginAttempts struct {
 	count      int
 	lockedTill time.Time
+	last       time.Time
 }
 
 func newSessionStore(secret []byte) *sessionStore {
@@ -111,11 +112,21 @@ func (s *sessionStore) allowAttempt(ip string) bool {
 func (s *sessionStore) recordFailure(ip string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Entries were never removed, so a scan from many addresses grew this
+	// map forever. Drop the stale ones once it gets large.
+	if len(s.failures) > 1000 {
+		for k, v := range s.failures {
+			if time.Since(v.last) > time.Hour {
+				delete(s.failures, k)
+			}
+		}
+	}
 	a, ok := s.failures[ip]
 	if !ok {
 		a = &loginAttempts{}
 		s.failures[ip] = a
 	}
+	a.last = time.Now()
 	a.count++
 	if a.count >= 5 {
 		a.lockedTill = time.Now().Add(5 * time.Minute)

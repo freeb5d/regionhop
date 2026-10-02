@@ -283,6 +283,18 @@ On the server, everything lives under `/opt/psi-panel/`:
 - The panel itself: bcrypt password hash, HMAC-signed session cookies,
   `HttpOnly`/`SameSite=Strict` cookies, and a 5-attempt login lockout per
   IP. Every tunnel-manipulating route requires an authenticated session.
+  Changing the admin password also rotates the session secret, signing out
+  every existing login. The server sets read/write/idle timeouts and request
+  size limits, and sends `no-referrer`, `nosniff`, `X-Frame-Options: DENY`
+  and `no-store` headers.
+- **The panel is served over plain HTTP.** Your password and session cookie
+  cross the network unencrypted, so anyone on the path between you and the
+  server can read them. Use it only from a network you trust, or put an
+  HTTPS reverse proxy in front of it, or bind it to `127.0.0.1` in
+  `/opt/psi-panel/panel/panel.env` (`PANEL_LISTEN`) and reach it through an
+  SSH tunnel.
+- A backup file contains your Psiphon config and any upstream credentials in
+  plain text — treat it like a password.
 - The panel process runs as an unprivileged `psipanel` system user. It has
   no standing root access. Everything it can do as root goes through one
   narrowly-scoped `sudoers` rule limited to exactly
