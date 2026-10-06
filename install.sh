@@ -672,6 +672,15 @@ start_panel() {
 }
 
 status_all() {
+  if [[ -r "$PANEL_ENV" ]]; then
+    local listen prefix
+    listen=$(sed -n 's/^PANEL_LISTEN=//p' "$PANEL_ENV" | head -1)
+    prefix=$(sed -n 's/^PANEL_PATH_PREFIX=//p' "$PANEL_ENV" | head -1)
+    echo "--- Panel address ---"
+    echo "http://$(server_ip):${listen##*:}${prefix}/"
+    [[ "${listen%:*}" == "127.0.0.1" ]] && echo "(bound to 127.0.0.1 only: reach it through an SSH tunnel)"
+    echo
+  fi
   echo "--- Panel ---"
   systemctl status psi-panel.service --no-pager -l || true
   echo "--- Tunnels ---"
@@ -690,7 +699,7 @@ install_psictl() {
   cat > "$tmp" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-usage() { echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-logs | panel-restart | update | check-update" >&2; }
+usage() { echo "usage: psictl {list|start|stop|restart|logs} <name> | panel-url | panel-logs | panel-restart | update | check-update" >&2; }
 cmd="${1:-}"
 case "$cmd" in
   start|stop|restart|logs)
@@ -707,6 +716,20 @@ case "$cmd" in
   stop) systemctl disable --now "psi-tunnel@$2" ;;
   restart) systemctl restart "psi-tunnel@$2" ;;
   logs) journalctl -u "psi-tunnel@$2" -n 200 --no-pager ;;
+  panel-url)
+    envf=/opt/psi-panel/panel/panel.env
+    [ -r "$envf" ] || { echo "cannot read $envf -- run as root (sudo psictl panel-url)" >&2; exit 1; }
+    listen=$(sed -n 's/^PANEL_LISTEN=//p' "$envf" | head -1)
+    prefix=$(sed -n 's/^PANEL_PATH_PREFIX=//p' "$envf" | head -1)
+    port=${listen##*:}; host=${listen%:*}
+    ip=$(curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || true)
+    [ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [ -n "$ip" ] || ip="<server-ip>"
+    echo "http://$ip:$port$prefix/"
+    if [ "$host" = "127.0.0.1" ]; then
+      echo "(bound to 127.0.0.1 only: reach it through an SSH tunnel, ssh -L $port:127.0.0.1:$port root@$ip)"
+    fi
+    ;;
   panel-logs) journalctl -u psi-panel -n 200 --no-pager ;;
   panel-restart) systemctl restart psi-panel ;;
   update) bash <(curl -Ls https://raw.githubusercontent.com/freeb5d/regionhop/master/install.sh) update ;;
