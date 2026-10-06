@@ -87,9 +87,11 @@ whole URL; the bare port with no path won't work, and (deliberately) won't
 even tell a scanner anything is listening there — bare requests to the root
 path get a generic 404, same as any other unknown path.
 
-**Lost the address?** Run `sudo psictl panel-url` on the server (or choose
-**Show status** in the installer menu). It's built from `PANEL_LISTEN` and
-`PANEL_PATH_PREFIX` in `/opt/psi-panel/panel/panel.env`.
+**Lost the address?** Run `sudo psictl panel-url` on the server, or open the
+installer menu and choose **Show panel address** (option 11). It's built from
+`PANEL_LISTEN` and `PANEL_PATH_PREFIX` in `/opt/psi-panel/panel/panel.env`.
+(`psictl panel-url` is a shell command, not something to type into the menu —
+the menu only takes numbers.)
 
 You can re-run the same command any time to reopen the menu (reinstall the
 core + panel, rotate the password, check status, uninstall, etc.) — it's

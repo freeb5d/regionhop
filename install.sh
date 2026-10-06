@@ -671,14 +671,27 @@ start_panel() {
   echo "Panel started."
 }
 
+# Prints the panel's full address (public IP, random port, random path) from
+# panel.env -- it is otherwise shown only once, at the end of first setup.
+panel_address() {
+  if [[ ! -r "$PANEL_ENV" ]]; then
+    echo "The panel isn't set up yet (or panel.env isn't readable) -- choose 'Full setup' first." >&2
+    return 1
+  fi
+  local listen prefix ip
+  listen=$(sed -n 's/^PANEL_LISTEN=//p' "$PANEL_ENV" | head -1)
+  prefix=$(sed -n 's/^PANEL_PATH_PREFIX=//p' "$PANEL_ENV" | head -1)
+  ip=$(server_ip)
+  echo "Panel URL:  http://${ip}:${listen##*:}${prefix}/"
+  if [[ "${listen%:*}" == "127.0.0.1" ]]; then
+    echo "(bound to 127.0.0.1 only: reach it through an SSH tunnel, ssh -L ${listen##*:}:127.0.0.1:${listen##*:} root@${ip})"
+  fi
+}
+
 status_all() {
   if [[ -r "$PANEL_ENV" ]]; then
-    local listen prefix
-    listen=$(sed -n 's/^PANEL_LISTEN=//p' "$PANEL_ENV" | head -1)
-    prefix=$(sed -n 's/^PANEL_PATH_PREFIX=//p' "$PANEL_ENV" | head -1)
     echo "--- Panel address ---"
-    echo "http://$(server_ip):${listen##*:}${prefix}/"
-    [[ "${listen%:*}" == "127.0.0.1" ]] && echo "(bound to 127.0.0.1 only: reach it through an SSH tunnel)"
+    panel_address
     echo
   fi
   echo "--- Panel ---"
@@ -839,6 +852,7 @@ menu() {
     "Check for updates"
     "Update to latest release"
     "Uninstall everything"
+    "Show panel address"
     "Quit"
   )
   select opt in "${options[@]}"; do
@@ -857,7 +871,8 @@ menu() {
       8) check_update || true ;;
       9) self_update ;;
       10) uninstall_all ;;
-      11) break ;;
+      11) panel_address || true ;;
+      12) break ;;
       *) echo "Invalid option" ;;
     esac
   done
