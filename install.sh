@@ -656,7 +656,7 @@ random_path_prefix() {
 }
 
 first_time_panel_setup() {
-  [[ -f "$PANEL_ENV" ]] && return
+  [[ -s "$PANEL_ENV" ]] && return
   local port secret path_prefix
   ask_port_range
   port=$(ask_panel_port)
@@ -679,7 +679,7 @@ first_time_panel_setup() {
 # update` picks this up on existing servers too, the same way the journal
 # group and sudoers rule retrofits work.
 ensure_path_prefix() {
-  [[ -f "$PANEL_ENV" ]] || return 0
+  [[ -s "$PANEL_ENV" ]] || return 0
   grep -q '^PANEL_PATH_PREFIX=' "$PANEL_ENV" 2>/dev/null && return 0
   local path_prefix
   path_prefix=$(random_path_prefix)
