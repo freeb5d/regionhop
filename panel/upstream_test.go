@@ -73,7 +73,7 @@ func TestGeneratedConfigsAcceptedByXray(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", l, err)
 		}
-		body, _ := json.Marshal(buildXrayConfig(ob))
+		body, _ := json.Marshal(buildXrayConfig(ob, upstreamXrayPort))
 		path := filepath.Join(dir, "c"+string(rune('a'+i))+".json")
 		if err := os.WriteFile(path, body, 0o600); err != nil {
 			t.Fatal(err)

@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="{{.Lang}}" dir="{{.Dir}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Credentials — regionhop</title>
+<title>Settings — regionhop</title>
 {{if .Font}}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{.Font}}:wght@400;500;600;700&display=swap">{{end}}
-<link rel="stylesheet" href="{{url "/static/style.css"}}">
+<link rel="stylesheet" href="{{asset "/static/style.css"}}">
 {{if .Font}}<style>body{font-family:"{{.Font}}",-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}</style>{{end}}
 </head>
 <body>
@@ -18,24 +18,42 @@
     </div>
   </div>
 
-  <div class="main" style="max-width:640px">
+  <div class="main main-wide">
     <div class="page-header">
-      <h1>{{t .Lang "creds.title"}}</h1>
-      <div class="desc">{{t .Lang "creds.desc"}}</div>
+      <h1>{{t .Lang "settings.title"}}</h1>
+      <div class="desc">{{t .Lang "settings.desc"}}</div>
     </div>
 
-    <div class="card">
-      {{if .Saved}}<div class="alert alert-success">{{t .Lang "creds.saved"}}</div>{{end}}
-      {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
-      <form method="post" action="{{url "/settings"}}">
-        <div class="field">
-          <label for="cfg">{{t .Lang "creds.label"}}</label>
-          <div class="actions" style="margin-bottom:0.5rem">
-            <button type="button" class="btn-ghost btn-sm" id="cfg-load-btn">{{t .Lang "creds.loadfile"}}</button>
-            <input type="file" id="cfg-file" accept=".json,application/json" hidden>
-            <span class="note" id="cfg-file-name"></span>
-          </div>
-          <textarea id="cfg" name="config_json" autocomplete="off" rows="14" placeholder='{
+    <div class="settings-layout">
+      <nav class="settings-nav" id="settings-nav" aria-label="{{t .Lang "settings.title"}}">
+        <a href="#psiphon">{{t .Lang "creds.title"}}</a>
+        <a href="#upstream">{{t .Lang "upstream.title"}}</a>
+        <a href="#autorestart">{{t .Lang "autorestart.title"}}</a>
+        <a href="#backup">{{t .Lang "backup.title"}}</a>
+      </nav>
+
+      <div class="settings-content">
+
+        <!-- ───────── Psiphon config ───────── -->
+        <section class="set-card" id="psiphon">
+          <header class="set-head">
+            <h2>{{t .Lang "creds.title"}}</h2>
+            <p>{{t .Lang "creds.desc"}}</p>
+          </header>
+          <form method="post" action="{{url "/settings"}}">
+            <div class="set-body">
+              {{if .Saved}}<div class="alert alert-success">{{t .Lang "creds.saved"}}</div>{{end}}
+              {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+              <div class="field">
+                <div class="row" style="justify-content:space-between;margin-bottom:0.45rem">
+                  <label for="cfg" style="margin:0">{{t .Lang "creds.label"}}</label>
+                  <span class="row" style="gap:0.5rem">
+                    <span class="hint" id="cfg-file-name" style="margin:0"></span>
+                    <button type="button" class="btn-ghost btn-sm" id="cfg-load-btn">{{t .Lang "creds.loadfile"}}</button>
+                    <input type="file" id="cfg-file" accept=".json,application/json" hidden>
+                  </span>
+                </div>
+                <textarea id="cfg" name="config_json" autocomplete="off" rows="12" spellcheck="false" placeholder='{
   "PropagationChannelId": "...",
   "SponsorId": "...",
   "RemoteServerListUrl": "...",
@@ -44,189 +62,245 @@
   "ServerEntrySignaturePublicKey": "...",
   "NetworkID": "..."
 }'>{{.ConfigJSON}}</textarea>
-        </div>
-        <button type="submit">{{t .Lang "creds.submit"}}</button>
-      </form>
-      <script>
-      // Reads the chosen file entirely client-side and drops its text into
-      // the existing textarea — the file itself never goes anywhere except
-      // through the normal form submit below, so this needs no new
-      // server-side upload endpoint or handling.
-      (function () {
-        var btn = document.getElementById("cfg-load-btn");
-        var fileInput = document.getElementById("cfg-file");
-        var nameEl = document.getElementById("cfg-file-name");
-        var textarea = document.getElementById("cfg");
-        btn.addEventListener("click", function () { fileInput.click(); });
-        fileInput.addEventListener("change", function () {
-          var file = fileInput.files[0];
-          if (!file) return;
-          nameEl.textContent = file.name;
-          var reader = new FileReader();
-          reader.onload = function () { textarea.value = reader.result; };
-          reader.onerror = function () { nameEl.textContent = {{t .Lang "creds.loadfile.error"}}; };
-          reader.readAsText(file);
-        });
-      })();
-      </script>
-      <div class="card-sub">
-        {{t .Lang "creds.note1"}}<br><br>
-        {{t .Lang "creds.note2"}}
-      </div>
-    </div>
+              </div>
+              <details class="more">
+                <summary>{{t .Lang "creds.more"}}</summary>
+                <p class="hint">{{t .Lang "creds.note1"}}</p>
+                <p class="hint">{{t .Lang "creds.note2"}}</p>
+              </details>
+            </div>
+            <footer class="set-foot">
+              <span class="spacer"></span>
+              <button type="submit">{{t .Lang "creds.submit"}}</button>
+            </footer>
+          </form>
+        </section>
 
-    <div class="card">
-      <div class="page-header" style="margin-bottom:0.5rem">
-        <h1 style="font-size:1.1rem">{{t .Lang "upstream.title"}}</h1>
-        <div class="desc">{{t .Lang "upstream.desc"}}</div>
-      </div>
-      {{if .UpstreamSaved}}<div class="alert alert-success">{{t .Lang "upstream.saved"}}</div>{{end}}
-      {{if .UpstreamError}}<div class="alert alert-error">{{.UpstreamError}}</div>{{end}}
-      <form method="post" action="{{url "/settings/upstream"}}">
-        <div class="field">
-          <label for="upstream-mode">{{t .Lang "upstream.mode"}}</label>
-          <select id="upstream-mode" name="upstream_mode">
-            <option value="none" {{if eq .Upstream.Mode "none"}}selected{{end}}>{{t .Lang "upstream.mode.none"}}</option>
-            <option value="proxy" {{if eq .Upstream.Mode "proxy"}}selected{{end}}>{{t .Lang "upstream.mode.proxy"}}</option>
-            <option value="v2ray" {{if eq .Upstream.Mode "v2ray"}}selected{{end}} {{if not .XrayAvailable}}disabled{{end}}>{{t .Lang "upstream.mode.v2ray"}}{{if not .XrayAvailable}} — {{t .Lang "upstream.noxray"}}{{end}}</option>
-          </select>
-        </div>
-        <div class="field" id="upstream-proxy-field">
-          <label for="upstream-proxy">{{t .Lang "upstream.proxy.label"}}</label>
-          <input id="upstream-proxy" name="upstream_proxy_url" autocomplete="off" value="{{.Upstream.ProxyURL}}" placeholder="socks5://127.0.0.1:1080">
-        </div>
-        <div class="field" id="upstream-v2ray-field">
-          <label for="upstream-v2ray">{{t .Lang "upstream.v2ray.label"}}</label>
-          <textarea id="upstream-v2ray" name="upstream_v2ray" autocomplete="off" rows="5" placeholder="vless://... | vmess://... | trojan://... | ss://... | { Xray outbound JSON }">{{.Upstream.V2Ray}}</textarea>
-          {{if eq .Upstream.Mode "v2ray"}}<div class="note">{{t .Lang "upstream.service"}}: {{.UpstreamState}}</div>{{end}}
-        </div>
-        <button type="submit">{{t .Lang "upstream.submit"}}</button>
-      </form>
-      <div class="card-sub">{{t .Lang "upstream.note"}}</div>
-      <script>
-      (function () {
-        var mode = document.getElementById("upstream-mode");
-        function sync() {
-          document.getElementById("upstream-proxy-field").hidden = mode.value !== "proxy";
-          document.getElementById("upstream-v2ray-field").hidden = mode.value !== "v2ray";
-        }
-        mode.addEventListener("change", sync);
-        sync();
-      })();
-      </script>
-    </div>
+        <!-- ───────── Upstream ───────── -->
+        <section class="set-card" id="upstream">
+          <header class="set-head">
+            <h2>{{t .Lang "upstream.title"}}</h2>
+            <p>{{t .Lang "upstream.desc"}}</p>
+          </header>
+          <form method="post" action="{{url "/settings/upstream"}}" id="upstream-form">
+            <div class="set-body">
+              {{if .UpstreamSaved}}<div class="alert alert-success">{{t .Lang "upstream.saved"}}</div>{{end}}
+              {{if .UpstreamError}}<div class="alert alert-error">{{.UpstreamError}}</div>{{end}}
+              <div class="field">
+                <label for="upstream-mode">{{t .Lang "upstream.mode"}}</label>
+                <select id="upstream-mode" name="upstream_mode">
+                  <option value="none" {{if eq .Upstream.Mode "none"}}selected{{end}}>{{t .Lang "upstream.mode.none"}}</option>
+                  <option value="proxy" {{if eq .Upstream.Mode "proxy"}}selected{{end}}>{{t .Lang "upstream.mode.proxy"}}</option>
+                  <option value="v2ray" {{if eq .Upstream.Mode "v2ray"}}selected{{end}} {{if not .XrayAvailable}}disabled{{end}}>{{t .Lang "upstream.mode.v2ray"}}{{if not .XrayAvailable}} — {{t .Lang "upstream.noxray"}}{{end}}</option>
+                </select>
+              </div>
+              <div class="field" id="upstream-proxy-field">
+                <label for="upstream-proxy">{{t .Lang "upstream.proxy.label"}}</label>
+                <input type="text" id="upstream-proxy" name="upstream_proxy_url" autocomplete="off" spellcheck="false" value="{{.Upstream.ProxyURL}}" placeholder="socks5://127.0.0.1:1080">
+              </div>
+              <div class="field" id="upstream-v2ray-field">
+                <label for="upstream-v2ray">{{t .Lang "upstream.v2ray.label"}}</label>
+                <textarea id="upstream-v2ray" name="upstream_v2ray" autocomplete="off" spellcheck="false" rows="5" placeholder="vless://... | vmess://... | trojan://... | ss://... | { Xray outbound JSON }">{{.Upstream.V2Ray}}</textarea>
+                {{if eq .Upstream.Mode "v2ray"}}<p class="hint">{{t .Lang "upstream.service"}}: <span class="badge {{if eq .UpstreamState "active"}}active{{else}}inactive{{end}}">{{.UpstreamState}}</span></p>{{end}}
+              </div>
+              <p class="hint" id="upstream-hint">{{t .Lang "upstream.note"}}</p>
+              <div class="test-result" id="upstream-test-result" role="status" aria-live="polite"></div>
+            </div>
+            <footer class="set-foot">
+              <span class="hint" style="margin:0">{{t .Lang "upstream.test.hint"}}</span>
+              <span class="spacer"></span>
+              <button type="button" class="btn-ghost" id="upstream-test-btn">{{t .Lang "upstream.test"}}</button>
+              <button type="submit">{{t .Lang "upstream.submit"}}</button>
+            </footer>
+          </form>
+        </section>
 
-    <div class="card">
-      <div class="page-header" style="margin-bottom:0.5rem">
-        <h1 style="font-size:1.1rem">{{t .Lang "autorestart.title"}}</h1>
-        <div class="desc">{{t .Lang "autorestart.desc"}}</div>
-      </div>
-      {{if .AutoRestartSaved}}<div class="alert alert-success">{{t .Lang "autorestart.saved"}}</div>{{end}}
-      {{if .AutoRestartError}}<div class="alert alert-error">{{.AutoRestartError}}</div>{{end}}
-      <form method="post" action="{{url "/settings/autorestart"}}">
-        <div class="field">
-          <label><input type="checkbox" name="ar_enabled" {{if .AutoRestart.Enabled}}checked{{end}}> {{t .Lang "autorestart.enable"}}</label>
-        </div>
-        <div class="field">
-          <label for="ar-every">{{t .Lang "autorestart.every"}}</label>
-          <div class="actions" style="gap:0.5rem">
-            <input id="ar-every" name="ar_every" type="number" min="1" max="8760" step="1" value="{{.AutoRestart.Every}}" style="max-width:7rem" required>
-            <select name="ar_unit" aria-label="{{t .Lang "autorestart.every"}}">
-              <option value="hours" {{if eq .AutoRestart.Unit "hours"}}selected{{end}}>{{t .Lang "autorestart.unit.hours"}}</option>
-              <option value="days" {{if eq .AutoRestart.Unit "days"}}selected{{end}}>{{t .Lang "autorestart.unit.days"}}</option>
-              <option value="weeks" {{if eq .AutoRestart.Unit "weeks"}}selected{{end}}>{{t .Lang "autorestart.unit.weeks"}}</option>
-            </select>
-          </div>
-        </div>
-        <div class="field">
-          <label>{{t .Lang "autorestart.scope"}}</label>
-          <label style="display:block"><input type="radio" name="ar_scope" value="all" {{if not .ArSelected}}checked{{end}}> {{t .Lang "autorestart.scope.all"}}</label>
-          <label style="display:block"><input type="radio" name="ar_scope" value="selected" {{if .ArSelected}}checked{{end}}> {{t .Lang "autorestart.scope.selected"}}</label>
-          <div id="ar-names" style="margin-top:0.5rem;padding-inline-start:1.4rem">
-            {{range .AutoRestartLocations}}
-            <label style="display:block"><input type="checkbox" name="ar_name" value="{{.Name}}" {{if .Checked}}checked{{end}}> <span class="mono">{{.Name}}</span> <span class="note">{{.Region}}</span></label>
-            {{else}}
-            <span class="note">{{t $.Lang "autorestart.nolocations"}}</span>
+        <!-- ───────── Auto restart ───────── -->
+        <section class="set-card" id="autorestart">
+          <header class="set-head">
+            <h2>{{t .Lang "autorestart.title"}}</h2>
+            <p>{{t .Lang "autorestart.desc"}}</p>
+          </header>
+          <form method="post" action="{{url "/settings/autorestart"}}">
+            <div class="set-body">
+              {{if .AutoRestartSaved}}<div class="alert alert-success">{{t .Lang "autorestart.saved"}}</div>{{end}}
+              {{if .AutoRestartError}}<div class="alert alert-error">{{.AutoRestartError}}</div>{{end}}
+
+              <div class="subsec">
+                <h3>{{t .Lang "autorestart.sec.schedule"}}</h3>
+                <label class="check"><input type="checkbox" name="ar_enabled" {{if .AutoRestart.Enabled}}checked{{end}}> <span>{{t .Lang "autorestart.enable"}}</span></label>
+                <div class="row">
+                  <label for="ar-every" style="margin:0">{{t .Lang "autorestart.every"}}</label>
+                  <input id="ar-every" class="input-sm" name="ar_every" type="number" min="1" max="8760" step="1" value="{{.AutoRestart.Every}}" required>
+                  <select class="input-sm" name="ar_unit" aria-label="{{t .Lang "autorestart.every"}}">
+                    <option value="hours" {{if eq .AutoRestart.Unit "hours"}}selected{{end}}>{{t .Lang "autorestart.unit.hours"}}</option>
+                    <option value="days" {{if eq .AutoRestart.Unit "days"}}selected{{end}}>{{t .Lang "autorestart.unit.days"}}</option>
+                    <option value="weeks" {{if eq .AutoRestart.Unit "weeks"}}selected{{end}}>{{t .Lang "autorestart.unit.weeks"}}</option>
+                  </select>
+                </div>
+                <dl class="kv">
+                  <dt>{{t .Lang "autorestart.next"}}</dt><dd id="ar-next">{{if .AutoRestartNext}}<span class="mono">{{.AutoRestartNext}}</span>{{else}}—{{end}}</dd>
+                  <dt>{{t .Lang "autorestart.last"}}</dt><dd>{{if .AutoRestartLast}}<span class="mono">{{.AutoRestartLast}}</span>{{else}}{{t .Lang "autorestart.never"}}{{end}}</dd>
+                </dl>
+                <p class="hint">{{t .Lang "autorestart.note"}}</p>
+              </div>
+
+              <div class="subsec">
+                <h3>{{t .Lang "autorestart.scope"}}</h3>
+                <label class="check"><input type="radio" name="ar_scope" value="all" {{if not .ArSelected}}checked{{end}}> <span>{{t .Lang "autorestart.scope.all"}}</span></label>
+                <label class="check"><input type="radio" name="ar_scope" value="selected" {{if .ArSelected}}checked{{end}}> <span>{{t .Lang "autorestart.scope.selected"}}</span></label>
+                <div class="loc-grid" id="ar-names">
+                  {{range .AutoRestartLocations}}
+                  <label class="check"><input type="checkbox" name="ar_name" value="{{.Name}}" {{if .Checked}}checked{{end}}> <span><span class="mono">{{.Name}}</span> <span class="muted">{{.Region}}</span></span></label>
+                  {{else}}
+                  <span class="hint" style="margin:0">{{t $.Lang "autorestart.nolocations"}}</span>
+                  {{end}}
+                </div>
+              </div>
+
+              <div class="subsec">
+                <h3>{{t .Lang "autorestart.gates.title"}}</h3>
+                <div class="row" style="margin-bottom:0.5rem">
+                  <label class="check" style="margin:0"><input type="checkbox" name="ar_latency" {{if gt .AutoRestart.MaxLatencyMs 0}}checked{{end}}> <span>{{t .Lang "autorestart.gate.latency"}}</span></label>
+                  <input class="input-sm" name="ar_max_latency" type="number" min="20" max="10000" step="10" value="{{if gt .AutoRestart.MaxLatencyMs 0}}{{.AutoRestart.MaxLatencyMs}}{{else}}200{{end}}" aria-label="{{t .Lang "autorestart.gate.latency"}}">
+                  <span class="muted">{{t .Lang "autorestart.gate.ms"}}</span>
+                </div>
+                <label class="check"><input type="checkbox" name="ar_new_ip" {{if .AutoRestart.NewIP}}checked{{end}}> <span>{{t .Lang "autorestart.gate.newip"}}</span></label>
+                <label class="check"><input type="checkbox" name="ar_gemini" {{if .AutoRestart.Gemini}}checked{{end}}> <span>{{t .Lang "autorestart.gate.gemini"}}</span></label>
+                <div class="row" style="margin-top:0.6rem">
+                  <span>{{t .Lang "autorestart.gate.tries"}}</span>
+                  <input class="input-sm" name="ar_tries" type="number" min="1" max="20" step="1" value="{{.AutoRestart.Tries}}" aria-label="{{t .Lang "autorestart.gate.tries"}}">
+                  <span class="muted">{{t .Lang "autorestart.gate.tries.unit"}}</span>
+                </div>
+                <p class="hint">{{t .Lang "autorestart.gate.note"}}</p>
+              </div>
+            </div>
+            <footer class="set-foot">
+              <span class="spacer"></span>
+              <button type="submit">{{t .Lang "autorestart.submit"}}</button>
+            </footer>
+          </form>
+        </section>
+
+        <!-- ───────── Backup ───────── -->
+        <section class="set-card" id="backup">
+          <header class="set-head">
+            <h2>{{t .Lang "backup.title"}}</h2>
+            <p>{{t .Lang "backup.desc"}}</p>
+          </header>
+          <div class="set-body">
+            {{if .ImportResult}}
+            <div class="alert alert-success">
+              {{tf .Lang "backup.import.added" (len .ImportResult.Added)}}
+              {{if .ImportResult.Skipped}}<br>{{tf .Lang "backup.import.skipped" (len .ImportResult.Skipped)}}
+              <ul>{{range $name, $reason := .ImportResult.Skipped}}<li>{{$name}}: {{$reason}}</li>{{end}}</ul>
+              {{end}}
+            </div>
             {{end}}
+            <div class="row">
+              <a class="btn btn-ghost" href="{{url "/backup/export"}}">{{t .Lang "backup.export"}}</a>
+              <form class="inline" method="post" action="{{url "/backup/import"}}" enctype="multipart/form-data" id="backup-import-form">
+                <input type="file" name="backup_file" id="backup-file" accept=".json,application/json" required hidden>
+                <button type="button" class="btn-ghost" id="backup-import-btn">{{t .Lang "backup.import"}}</button>
+              </form>
+            </div>
+            <p class="hint">{{t .Lang "backup.note"}}</p>
           </div>
-        </div>
-        <div class="field">
-          <label>{{t .Lang "autorestart.gates.title"}}</label>
-          <div class="actions" style="gap:0.5rem">
-            <label><input type="checkbox" name="ar_latency" {{if gt .AutoRestart.MaxLatencyMs 0}}checked{{end}}> {{t .Lang "autorestart.gate.latency"}}</label>
-            <input name="ar_max_latency" type="number" min="20" max="10000" step="10" value="{{if gt .AutoRestart.MaxLatencyMs 0}}{{.AutoRestart.MaxLatencyMs}}{{else}}200{{end}}" style="max-width:6rem" aria-label="{{t .Lang "autorestart.gate.latency"}}">
-            <span class="note">{{t .Lang "autorestart.gate.ms"}}</span>
-          </div>
-          <label style="display:block"><input type="checkbox" name="ar_new_ip" {{if .AutoRestart.NewIP}}checked{{end}}> {{t .Lang "autorestart.gate.newip"}}</label>
-          <label style="display:block"><input type="checkbox" name="ar_gemini" {{if .AutoRestart.Gemini}}checked{{end}}> {{t .Lang "autorestart.gate.gemini"}}</label>
-          <div class="actions" style="gap:0.5rem;margin-top:0.4rem">
-            <span>{{t .Lang "autorestart.gate.tries"}}</span>
-            <input name="ar_tries" type="number" min="1" max="20" step="1" value="{{.AutoRestart.Tries}}" style="max-width:5rem" aria-label="{{t .Lang "autorestart.gate.tries"}}">
-            <span class="note">{{t .Lang "autorestart.gate.tries.unit"}}</span>
-          </div>
-          <div class="note" style="margin-top:0.4rem">{{t .Lang "autorestart.gate.note"}}</div>
-        </div>
-        <button type="submit">{{t .Lang "autorestart.submit"}}</button>
-      </form>
-      <script>
-      // The location list only matters for "selected": grey it out for "all".
-      // (Without JS everything stays enabled and the server ignores the
-      // ticks when "all" is chosen.)
-      (function () {
-        var radios = document.querySelectorAll('input[name="ar_scope"]');
-        var boxes = document.querySelectorAll('#ar-names input[type="checkbox"]');
-        var wrap = document.getElementById("ar-names");
-        function sync() {
-          var selected = document.querySelector('input[name="ar_scope"]:checked').value === "selected";
-          boxes.forEach(function (b) { b.disabled = !selected; });
-          wrap.style.opacity = selected ? "1" : "0.5";
-        }
-        radios.forEach(function (r) { r.addEventListener("change", sync); });
-        sync();
-      })();
-      </script>
-      <div class="card-sub">
-        {{t .Lang "autorestart.next"}}: <span class="mono" id="ar-next">{{if .AutoRestartNext}}{{.AutoRestartNext}}{{else}}—{{end}}</span><br>
-        {{t .Lang "autorestart.last"}}: <span class="mono">{{if .AutoRestartLast}}{{.AutoRestartLast}}{{else}}{{t .Lang "autorestart.never"}}{{end}}</span><br><br>
-        {{t .Lang "autorestart.note"}}
-      </div>
-    </div>
+        </section>
 
-    <div class="card">
-      <div class="page-header" style="margin-bottom:0.5rem">
-        <h1 style="font-size:1.1rem">{{t .Lang "backup.title"}}</h1>
-        <div class="desc">{{t .Lang "backup.desc"}}</div>
       </div>
-
-      {{if .ImportResult}}
-      <div class="alert alert-success">
-        {{tf .Lang "backup.import.added" (len .ImportResult.Added)}}
-        {{if .ImportResult.Skipped}}<br>{{tf .Lang "backup.import.skipped" (len .ImportResult.Skipped)}}
-        <ul>{{range $name, $reason := .ImportResult.Skipped}}<li>{{$name}}: {{$reason}}</li>{{end}}</ul>
-        {{end}}
-      </div>
-      {{end}}
-
-      <div class="actions" style="gap:0.75rem">
-        <a class="btn-ghost btn-sm" href="{{url "/backup/export"}}">{{t .Lang "backup.export"}}</a>
-        <form class="inline" method="post" action="{{url "/backup/import"}}" enctype="multipart/form-data" id="backup-import-form">
-          <input type="file" name="backup_file" id="backup-file" accept=".json,application/json" required hidden>
-          <button type="button" class="btn-ghost btn-sm" id="backup-import-btn">{{t .Lang "backup.import"}}</button>
-        </form>
-      </div>
-      <div class="card-sub">{{t .Lang "backup.note"}}</div>
-      <script>
-      (function () {
-        var form = document.getElementById("backup-import-form");
-        var fileInput = document.getElementById("backup-file");
-        var btn = document.getElementById("backup-import-btn");
-        btn.addEventListener("click", function () { fileInput.click(); });
-        fileInput.addEventListener("change", function () {
-          if (fileInput.files[0]) form.submit();
-        });
-      })();
-      </script>
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+
+  // Psiphon config: load a .json file into the textarea (read in the browser, not uploaded).
+  (function () {
+    var fileInput = $("cfg-file"), nameEl = $("cfg-file-name"), textarea = $("cfg");
+    $("cfg-load-btn").addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () {
+      var file = fileInput.files[0];
+      if (!file) return;
+      nameEl.textContent = file.name;
+      var reader = new FileReader();
+      reader.onload = function () { textarea.value = reader.result; };
+      reader.onerror = function () { nameEl.textContent = {{t .Lang "creds.loadfile.error"}}; };
+      reader.readAsText(file);
+    });
+  })();
+
+  // Upstream: show only the field the chosen mode needs; Test tries the form's current values.
+  (function () {
+    var mode = $("upstream-mode"), proxyF = $("upstream-proxy-field"), v2F = $("upstream-v2ray-field");
+    var btn = $("upstream-test-btn"), out = $("upstream-test-result");
+    function sync() {
+      proxyF.hidden = mode.value !== "proxy";
+      v2F.hidden = mode.value !== "v2ray";
+      btn.disabled = mode.value === "none";
+      out.textContent = ""; out.className = "test-result";
+    }
+    mode.addEventListener("change", sync);
+    sync();
+    btn.addEventListener("click", function () {
+      var body = new URLSearchParams(new FormData($("upstream-form")));
+      btn.disabled = true;
+      out.className = "test-result";
+      out.textContent = {{t .Lang "upstream.testing"}};
+      fetch({{url "/settings/upstream/test"}}, { method: "POST", body: body, credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.ok) {
+            out.className = "test-result ok";
+            out.textContent = "✓ " + {{t .Lang "upstream.test.ok"}} + " — " + {{t .Lang "upstream.test.exit"}} + " " + res.ip + " · " + res.latencyMs + " ms";
+          } else {
+            out.className = "test-result err";
+            out.textContent = "✕ " + {{t .Lang "upstream.test.fail"}} + ": " + (res.error || "?");
+          }
+        })
+        .catch(function () { out.className = "test-result err"; out.textContent = "✕ " + {{t .Lang "upstream.test.fail"}}; })
+        .finally(function () { btn.disabled = mode.value === "none"; });
+    });
+  })();
+
+  // Auto restart: the location list only matters for "selected".
+  (function () {
+    var radios = document.querySelectorAll('input[name="ar_scope"]');
+    var boxes = document.querySelectorAll('#ar-names input[type="checkbox"]');
+    var wrap = $("ar-names");
+    function sync() {
+      var selected = document.querySelector('input[name="ar_scope"]:checked').value === "selected";
+      boxes.forEach(function (b) { b.disabled = !selected; });
+      wrap.classList.toggle("is-off", !selected);
+    }
+    radios.forEach(function (r) { r.addEventListener("change", sync); });
+    sync();
+  })();
+
+  // Backup: choosing a file submits the import straight away.
+  (function () {
+    var form = $("backup-import-form"), fileInput = $("backup-file");
+    $("backup-import-btn").addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", function () { if (fileInput.files[0]) form.submit(); });
+  })();
+
+  // Side navigation: highlight the section being read.
+  (function () {
+    var links = [].slice.call(document.querySelectorAll("#settings-nav a"));
+    if (!("IntersectionObserver" in window)) return;
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+    var visible = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting; });
+      var current = Object.keys(byId).filter(function (id) { return visible[id]; })[0];
+      if (current) links.forEach(function (a) { a.classList.toggle("active", a === byId[current]); });
+    }, { rootMargin: "-80px 0px -55% 0px" });
+    Object.keys(byId).forEach(function (id) { var el = $(id); if (el) io.observe(el); });
+    var first = links[0]; if (first) first.classList.add("active");
+  })();
+})();
+</script>
 </body></html>

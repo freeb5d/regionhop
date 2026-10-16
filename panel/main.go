@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,9 +35,16 @@ var basePath string
 // every link, form action, and JS fetch target goes through this.
 func urlFor(path string) string { return basePath + path }
 
+// assetVersion is appended to static file URLs. Without it a browser keeps
+// serving the stylesheet it cached before an update, and the new pages render
+// with old CSS until a hard refresh. It changes on every release and every
+// panel restart.
+var assetVersion = CurrentVersion + "-" + strconv.FormatInt(time.Now().Unix(), 36)
+
 var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
-	"url": urlFor,
-	"t":   t,
+	"url":   urlFor,
+	"asset": func(p string) string { return urlFor(p) + "?v=" + assetVersion },
+	"t":     t,
 	"tf": func(lang, key string, args ...any) string {
 		return fmt.Sprintf(t(lang, key), args...)
 	},
@@ -123,6 +131,7 @@ func main() {
 	mux.HandleFunc(basePath+"/tunnels/", a.requireAuth(a.handleTunnelAction))
 	mux.HandleFunc(basePath+"/settings", a.requireAuth(a.handleSettings))
 	mux.HandleFunc(basePath+"/settings/upstream", a.requireAuth(a.handleUpstream))
+	mux.HandleFunc(basePath+"/settings/upstream/test", a.requireAuth(a.handleUpstreamTest))
 	mux.HandleFunc(basePath+"/settings/autorestart", a.requireAuth(a.handleAutoRestart))
 	mux.HandleFunc(basePath+"/backup/export", a.requireAuth(a.handleBackupExport))
 	mux.HandleFunc(basePath+"/backup/import", a.requireAuth(a.handleBackupImport))

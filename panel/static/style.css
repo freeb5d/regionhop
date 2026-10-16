@@ -150,6 +150,7 @@ label {
 
 input[type="text"],
 input[type="password"],
+input[type="number"],
 textarea,
 select {
   width: 100%;
@@ -165,6 +166,7 @@ select {
 
 input[type="text"]:focus,
 input[type="password"]:focus,
+input[type="number"]:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -462,3 +464,137 @@ pre.logs {
    that don't. */
 [dir="rtl"] .breadcrumb { direction: rtl; }
 [dir="rtl"] .mono { direction: ltr; unicode-bidi: embed; } /* IPs/ports/codes stay LTR */
+
+/* Settings page ------------------------------------------------------ */
+.main-wide { max-width: 1080px; }
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.settings-nav {
+  position: sticky;
+  top: 84px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav a {
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  border-inline-start: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+.settings-nav a:hover { color: var(--text); background: var(--bg-elevated); }
+.settings-nav a.active {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-inline-start-color: var(--accent);
+}
+
+.set-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  scroll-margin-top: 84px;
+}
+.set-head { padding: 1.1rem 1.4rem 0.95rem; border-bottom: 1px solid var(--border-soft); }
+.set-head h2 { margin: 0 0 0.2rem; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+.set-head p { margin: 0; max-width: 62ch; color: var(--text-muted); font-size: 0.84rem; }
+.set-body { padding: 1.2rem 1.4rem; }
+.set-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.85rem 1.4rem;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-soft);
+}
+.set-foot .spacer { flex: 1 1 0; }
+
+.subsec + .subsec { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border-soft); }
+.subsec h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Option rows: the global <label> style is for small-caps field titles, so
+   checkbox/radio rows opt out of it. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.check input { margin-top: 0.2rem; accent-color: var(--accent); flex-shrink: 0; }
+.check .muted, .muted { color: var(--text-muted); }
+
+.row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+/* Same specificity as the global input/select rules, and later, so it wins. */
+input.input-sm { width: 6.5rem; }
+select.input-sm { width: auto; min-width: 6.5rem; }
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1.1rem;
+  margin: 1rem 0 0;
+  font-size: 0.84rem;
+}
+.kv dt { color: var(--text-muted); }
+.kv dd { margin: 0; }
+
+.loc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.15rem 1rem;
+  margin-top: 0.6rem;
+  padding: 0.75rem 0.9rem 0.4rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.loc-grid.is-off { opacity: 0.45; }
+
+.hint { margin: 0.6rem 0 0; color: var(--text-muted); font-size: 0.8rem; line-height: 1.55; }
+.more { margin-top: 0.9rem; }
+.more summary { cursor: pointer; color: var(--text-muted); font-size: 0.82rem; font-weight: 500; }
+.more summary:hover { color: var(--text); }
+
+.test-result { min-height: 1.4rem; margin-top: 0.4rem; font-size: 0.86rem; font-weight: 500; overflow-wrap: anywhere; }
+.test-result.ok { color: var(--success); }
+.test-result.err { color: var(--danger); }
+
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+@media (max-width: 860px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 1.1rem; }
+  .settings-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.4rem;
+    padding-bottom: 0.2rem;
+  }
+  .settings-nav a { white-space: nowrap; border: 1px solid var(--border); }
+  .settings-nav a.active { border-color: var(--accent); }
+  .set-head, .set-body, .set-foot { padding-inline: 1rem; }
+}

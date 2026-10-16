@@ -230,6 +230,13 @@ it, and running locations are restarted to pick up the change:
   (`regionhop-upstream.service`) behind a SOCKS inbound on `127.0.0.1:18999`
   only, and checks the config with `xray run -test` before applying it.
 
+**Test before you save.** The **Test** button next to *Save upstream* tries
+the values currently in the form without saving them: it fetches your exit IP
+through the proxy (or through a V2Ray link, run for a few seconds in a
+temporary Xray on a spare local port) and shows ✓ with the exit IP and the
+time, or ✕ with the reason. `socks4a://` can't be tested this way (Psiphon
+itself supports it).
+
 The upstream is included in [backups](#updating) too.
 
 ## Managing it over SSH

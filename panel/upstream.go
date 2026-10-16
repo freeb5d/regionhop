@@ -22,11 +22,13 @@ import (
 const (
 	upstreamSettingsPath = "/opt/psi-panel/data/upstream.json"
 	upstreamXrayConfig   = "/opt/psi-panel/data/upstream-xray.json"
-	xrayBinary           = "/opt/psi-panel/core/xray"
 	upstreamUnit         = "regionhop-upstream.service"
 	// Outside the tunnels' 19000-19999 range; loopback-only either way.
 	upstreamXrayPort = 18999
 )
+
+// A variable so tests can point it at a binary in a temp location.
+var xrayBinary = "/opt/psi-panel/core/xray"
 
 const (
 	upstreamNone  = "none"
@@ -121,7 +123,7 @@ func applyUpstreamService(s upstreamSettings) error {
 	if err != nil {
 		return err
 	}
-	body, err := json.MarshalIndent(buildXrayConfig(outbound), "", "  ")
+	body, err := json.MarshalIndent(buildXrayConfig(outbound, upstreamXrayPort), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -174,11 +176,11 @@ func (a *app) applyUpstream(s upstreamSettings) error {
 	return nil
 }
 
-func buildXrayConfig(outbound map[string]any) map[string]any {
+func buildXrayConfig(outbound map[string]any, port int) map[string]any {
 	return map[string]any{
 		"log": map[string]any{"loglevel": "warning"},
 		"inbounds": []any{map[string]any{
-			"tag": "psiphon-in", "listen": "127.0.0.1", "port": upstreamXrayPort,
+			"tag": "psiphon-in", "listen": "127.0.0.1", "port": port,
 			"protocol": "socks", "settings": map[string]any{"auth": "noauth", "udp": false},
 		}},
 		"outbounds": []any{outbound},
