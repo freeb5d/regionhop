@@ -582,6 +582,34 @@ random_port() {
   done
 }
 
+# Asks for the web panel port. Blank = a random free port. Only asked from a
+# terminal; prints the chosen port.
+ask_panel_port() {
+  local ans
+  if [[ -t 0 ]]; then
+    echo >&2
+    echo "Web panel port: press Enter for a random port, or type your own (1024-65535)." >&2
+    while true; do
+      read -rp "Panel port [random]: " ans
+      ans=${ans// /}
+      [[ -z "$ans" ]] && break
+      if [[ "$ans" =~ ^[0-9]+$ ]] && (( 10#$ans >= 1024 && 10#$ans <= 65535 )); then
+        ans=$((10#$ans))
+        if (( ans >= ${SOCKS_MIN:-19000} && ans <= ${SOCKS_MAX:-19999} )); then
+          echo "That port is inside the SOCKS range ${SOCKS_MIN:-19000}-${SOCKS_MAX:-19999}. Pick another." >&2
+        elif command -v ss &>/dev/null && [[ -n "$(ss -ltn "sport = :$ans" 2>/dev/null | tail -n +2)" ]]; then
+          echo "Port $ans is already in use. Pick another." >&2
+        else
+          echo "$ans"; return 0
+        fi
+      else
+        echo "Invalid port. Use a number between 1024 and 65535." >&2
+      fi
+    done
+  fi
+  random_port
+}
+
 set_panel_password() {
   read -rsp "New panel admin password: " pw1; echo
   read -rsp "Confirm password: " pw2; echo
@@ -631,7 +659,7 @@ first_time_panel_setup() {
   [[ -f "$PANEL_ENV" ]] && return
   local port secret path_prefix
   ask_port_range
-  port=$(random_port)
+  port=$(ask_panel_port)
   secret=$(head -c 32 /dev/urandom | xxd -p -c 32)
   path_prefix=$(random_path_prefix)
   set_env_var PANEL_LISTEN "0.0.0.0:$port"

@@ -317,7 +317,7 @@ On the server, everything lives under `/opt/psi-panel/`:
   iptables chain), so other software on the same server — a 3x-ui panel or
   inbound that happens to use a port in 19000–19999, say — is never blocked.
   New locations also skip any port something else is already listening on.
-- **SOCKS port range.** The installer asks which port range to use for the local SOCKS proxies. Press Enter for the default (19000–19999) or type your own, e.g. `30000-30999`. It is saved as `SOCKS_PORT_RANGE` in `/opt/psi-panel/panel.env`.
+- **Ports.** The installer also asks for the web panel port (Enter = random). It asks which SOCKS port range to use for the local SOCKS proxies. Press Enter for the default (19000–19999) or type your own, e.g. `30000-30999`. It is saved as `SOCKS_PORT_RANGE` in `/opt/psi-panel/panel.env`.
 - The panel itself: bcrypt password hash, HMAC-signed session cookies,
   `HttpOnly`/`SameSite=Strict` cookies, and a 5-attempt login lockout per
   IP. Every tunnel-manipulating route requires an authenticated session.
