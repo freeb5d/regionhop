@@ -35,6 +35,13 @@ type autoRestartSettings struct {
 	// location, which is also what a schedule saved before this field
 	// existed gets.
 	Only []string `json:"only,omitempty"`
+
+	// Quality gates (see autorestart_gates.go): after a restart the location
+	// must pass every ticked check, or it is restarted again, up to MaxTries.
+	MaxLatencyMs int  `json:"max_latency_ms,omitempty"` // real delay must be at most this; 0 = not checked
+	NewIP        bool `json:"new_ip,omitempty"`         // exit IP must differ from before the restart
+	Gemini       bool `json:"gemini,omitempty"`         // Gemini must not be blocked on the exit IP
+	MaxTries     int  `json:"max_tries,omitempty"`      // 0 = defaultMaxTries
 }
 
 // includes reports whether the schedule covers the named location.
@@ -78,7 +85,7 @@ func validateAutoRestart(s autoRestartSettings) error {
 	if s.interval() > autoRestartMaxDays*24*time.Hour {
 		return fmt.Errorf("the interval can be at most %d days", autoRestartMaxDays)
 	}
-	return nil
+	return validateGates(s)
 }
 
 func loadAutoRestart() autoRestartSettings {
@@ -174,7 +181,9 @@ func (a *app) restartAllRunning(s autoRestartSettings) {
 			continue
 		}
 		covered++
-		if a.restartIfRunning(t.Name) {
+		n, verdict := restartUntilGood(s, a.realGateDeps(t.Name, fmt.Sprintf("127.0.0.1:%d", t.SocksPort), s))
+		logGateOutcome(t.Name, n, verdict)
+		if n > 0 {
 			restarted++
 			time.Sleep(autoRestartStagger)
 		}
@@ -274,6 +283,15 @@ func (a *app) handleAutoRestart(w http.ResponseWriter, r *http.Request) {
 		Every:   every,
 		Unit:    r.FormValue("ar_unit"),
 	}
+	if r.FormValue("ar_latency") == "on" {
+		s.MaxLatencyMs, _ = strconv.Atoi(strings.TrimSpace(r.FormValue("ar_max_latency")))
+		if s.MaxLatencyMs == 0 {
+			s.MaxLatencyMs = -1 // ticked but empty/invalid: let validation explain
+		}
+	}
+	s.NewIP = r.FormValue("ar_new_ip") == "on"
+	s.Gemini = r.FormValue("ar_gemini") == "on"
+	s.MaxTries, _ = strconv.Atoi(strings.TrimSpace(r.FormValue("ar_tries")))
 	scopeSelected := r.FormValue("ar_scope") == "selected"
 	if scopeSelected {
 		existing := map[string]bool{}
@@ -299,6 +317,7 @@ func (a *app) handleAutoRestart(w http.ResponseWriter, r *http.Request) {
 		// Turning it off must always work, even if the form was left in a
 		// state that wouldn't be a valid schedule.
 		s.Every, s.Unit, s.Only, err = old.Every, old.Unit, old.Only, nil
+		s.MaxLatencyMs, s.NewIP, s.Gemini, s.MaxTries = old.MaxLatencyMs, old.NewIP, old.Gemini, old.MaxTries
 		scopeSelected = len(old.Only) > 0
 	}
 	if err == nil {

@@ -5,8 +5,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"html"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,7 +21,9 @@ type probeResult struct {
 	OK        bool   `json:"ok"`
 	LatencyMs int    `json:"latencyMs"`
 	Error     string `json:"error,omitempty"`
-	IP        string `json:"ip,omitempty"` // exit address as seen by websites; empty if the lookup failed
+	IP        string `json:"ip,omitempty"`     // exit address as seen by websites; empty if the lookup failed
+	Google    string `json:"google,omitempty"` // google mode only: "ok" or "blocked"
+	Detail    string `json:"detail,omitempty"` // google mode only: why it was judged blocked
 }
 
 // probeTargetHost is a single fixed, well-known endpoint used for every
@@ -178,6 +185,8 @@ func runProbe(mode, socksAddr string) probeResult {
 		r = probeHTTP(socksAddr)
 	case "real":
 		r = probeReal(socksAddr)
+	case "google":
+		r = probeGoogle(socksAddr)
 	default:
 		return probeResult{Error: "unknown probe mode"}
 	}
@@ -266,4 +275,161 @@ func parseIPEchoResponse(raw string) string {
 		return ""
 	}
 	return ip.String()
+}
+
+// geminiURL is the one fixed page the Google check loads; a variable only so
+// tests can point it at a local server.
+var geminiURL = "https://gemini.google.com/"
+
+const (
+	geminiTimeout = 15 * time.Second
+	// A browser User-Agent: Google answers Go's default one differently.
+	browserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+type geminiResult struct {
+	OK        bool
+	Reached   bool // an HTTP answer came back at all (false = the request itself failed)
+	Reason    string
+	LatencyMs int
+}
+
+// checkGemini loads the Gemini web app through the tunnel and decides whether
+// Google is serving it to this exit IP. "OK" needs positive evidence -- a 200
+// page titled Gemini -- so a CAPTCHA, a 403 ("Your client does not have
+// permission to get URL / from this server", observed from a blocked exit),
+// or any other page counts as blocked, with the reason kept for the tooltip.
+//
+// Only the first 64 KB is read (the real page is ~800 KB; a block page is a
+// few KB), and redirects are followed only within the same host, so nothing a
+// remote server says can make the panel dial somewhere else.
+func checkGemini(socksAddr string) geminiResult {
+	ctx, cancel := context.WithTimeout(context.Background(), geminiTimeout)
+	defer cancel()
+	tr := &http.Transport{
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+			host, portStr, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return nil, err
+			}
+			return socks5Connect(ctx, socksAddr, host, port)
+		},
+		DisableKeepAlives: true,
+	}
+	defer tr.CloseIdleConnections()
+	client := &http.Client{Transport: tr, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 4 || req.URL.Host != via[0].URL.Host {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}}
+	req, err := http.NewRequestWithContext(ctx, "GET", geminiURL, nil)
+	if err != nil {
+		return geminiResult{Reason: err.Error()}
+	}
+	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		return geminiResult{Reason: "unreachable: " + err.Error()}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	ok, why := classifyGemini(resp.StatusCode, resp.Request.URL, resp.Header.Get("Location"), resp.Header.Get("Content-Security-Policy"), string(body))
+	return geminiResult{OK: ok, Reached: true, Reason: why, LatencyMs: int(time.Since(start).Milliseconds())}
+}
+
+// Phrases that never appear on the normal Gemini page (checked against it)
+// but do on Google's block / unsupported pages.
+var geminiBlockPhrases = []string{
+	"unusual traffic", "captcha",
+	"not supported in your", "isn't supported in your",
+	"not available in your", "isn't available in your",
+}
+
+var titleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+
+func htmlTitle(body string) string {
+	m := titleRE.FindStringSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	t := strings.TrimSpace(strings.Trim(html.UnescapeString(m[1]), "\u200e\u200f \t\r\n"))
+	if len(t) > 80 {
+		t = t[:80]
+	}
+	return t
+}
+
+// classifyGemini turns one HTTP answer into (served?, reason).
+//
+// "Served" needs positive evidence that it is the real Gemini app. The page's
+// <title> can't be that evidence: in the real ~800 KB page it comes at byte
+// ~757,000, far past what is read. Two things near the top do work: the
+// og:site_name meta tag, and the Content-Security-Policy header, whose
+// report-uri names the app ("BardChatUi"). The title still counts if it
+// happens to be in the part that was read.
+func classifyGemini(status int, u *url.URL, location, csp, body string) (bool, string) {
+	title := htmlTitle(body)
+	suffix := ""
+	if title != "" {
+		suffix = ": " + title
+	}
+	if status >= 300 && status < 400 {
+		loc, err := u.Parse(location)
+		if err != nil || location == "" {
+			return false, fmt.Sprintf("HTTP %d redirect with no usable address", status)
+		}
+		host := strings.ToLower(loc.Hostname())
+		switch {
+		case strings.HasPrefix(loc.Path, "/sorry"):
+			return false, "Google is asking for a CAPTCHA (unusual traffic from this IP)"
+		case strings.HasPrefix(host, "consent."):
+			return true, "Google served its consent page"
+		}
+		return false, fmt.Sprintf("redirected to %s%s (HTTP %d)", host, loc.Path, status)
+	}
+	if strings.HasPrefix(u.Path, "/sorry") {
+		return false, "Google is asking for a CAPTCHA (unusual traffic from this IP)"
+	}
+	if status == 429 {
+		return false, "HTTP 429: too many requests / unusual traffic" + suffix
+	}
+	if status >= 400 {
+		return false, fmt.Sprintf("HTTP %d%s", status, suffix)
+	}
+	lower := strings.ToLower(body)
+	for _, p := range geminiBlockPhrases {
+		if strings.Contains(lower, p) {
+			return false, "page says \"" + p + "\"" + suffix
+		}
+	}
+	isGemini := strings.Contains(strings.ToLower(title), "gemini") ||
+		strings.Contains(lower, `og:site_name" content="gemini"`) ||
+		strings.Contains(csp, "BardChatUi")
+	if !isGemini {
+		return false, "unexpected page" + suffix
+	}
+	return true, ""
+}
+
+// probeGoogle is the dashboard's "Google" test: OK means the request got an
+// answer (so the exit IP can be looked up), Google says whether Gemini is
+// being served to that IP.
+func probeGoogle(socksAddr string) probeResult {
+	g := checkGemini(socksAddr)
+	if !g.Reached {
+		return probeResult{Error: g.Reason, Google: "blocked", Detail: g.Reason}
+	}
+	r := probeResult{OK: true, LatencyMs: g.LatencyMs, Detail: g.Reason, Google: "blocked"}
+	if g.OK {
+		r.Google = "ok"
+	}
+	return r
 }

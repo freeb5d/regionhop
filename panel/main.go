@@ -578,7 +578,7 @@ func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
 		// synchronously in this request: the caller (the dashboard's JS)
 		// waits for the result and shows it.
 		mode := r.URL.Query().Get("mode")
-		if mode != "tcp" && mode != "http" && mode != "real" {
+		if mode != "tcp" && mode != "http" && mode != "real" && mode != "google" {
 			http.Error(w, "invalid mode", 400)
 			return
 		}

@@ -136,12 +136,24 @@ Open the panel URL printed at the end of setup, sign in, and:
 5. Use the ⚡ button (or **Test all**) to measure latency. The result also
    shows the exit IP under it, looked up through that location's tunnel via
    `api.ipify.org` (with `checkip.amazonaws.com` as a fallback) — those
-   services see only the exit address, never your own.
+   services see only the exit address, never your own. The **Google** tab
+   instead checks whether Google serves Gemini to that exit IP: a green
+   **OK** or a red **Blocked** (hover it for the reason). *Blocked* means
+   Google answered with an error such as `403`, a CAPTCHA / `429`, a redirect
+   to somewhere unexpected, or a page that is not the Gemini app, or that
+   Google could not be reached at all.
 6. **Auto restart** (Settings page) restarts running locations on a
    schedule of 1 hour to 365 days — all of them, or only the ones you tick. It
    restarts one location at a time about 3 seconds apart, leaves stopped
    locations stopped, and shows the next restart time (UTC). Each restart
-   briefly drops that location's connections.
+   briefly drops that location's connections. It can also **restart again
+   until** a location comes back good: its real delay is under a limit you
+   set, its exit IP differs from before the restart, and/or Gemini is not
+   blocked on the new IP. After each restart the panel waits for the location
+   to reconnect and runs the ticked checks; if one fails it restarts that
+   location again, up to a "give up after N tries" limit (default 5, so a
+   check that can never pass can't loop forever), then moves on to the next
+   location. Outcomes are logged (`psictl panel-logs`).
 
 ## Available regions
 

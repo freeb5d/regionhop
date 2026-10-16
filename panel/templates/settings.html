@@ -150,6 +150,22 @@
             {{end}}
           </div>
         </div>
+        <div class="field">
+          <label>{{t .Lang "autorestart.gates.title"}}</label>
+          <div class="actions" style="gap:0.5rem">
+            <label><input type="checkbox" name="ar_latency" {{if gt .AutoRestart.MaxLatencyMs 0}}checked{{end}}> {{t .Lang "autorestart.gate.latency"}}</label>
+            <input name="ar_max_latency" type="number" min="20" max="10000" step="10" value="{{if gt .AutoRestart.MaxLatencyMs 0}}{{.AutoRestart.MaxLatencyMs}}{{else}}200{{end}}" style="max-width:6rem" aria-label="{{t .Lang "autorestart.gate.latency"}}">
+            <span class="note">{{t .Lang "autorestart.gate.ms"}}</span>
+          </div>
+          <label style="display:block"><input type="checkbox" name="ar_new_ip" {{if .AutoRestart.NewIP}}checked{{end}}> {{t .Lang "autorestart.gate.newip"}}</label>
+          <label style="display:block"><input type="checkbox" name="ar_gemini" {{if .AutoRestart.Gemini}}checked{{end}}> {{t .Lang "autorestart.gate.gemini"}}</label>
+          <div class="actions" style="gap:0.5rem;margin-top:0.4rem">
+            <span>{{t .Lang "autorestart.gate.tries"}}</span>
+            <input name="ar_tries" type="number" min="1" max="20" step="1" value="{{.AutoRestart.Tries}}" style="max-width:5rem" aria-label="{{t .Lang "autorestart.gate.tries"}}">
+            <span class="note">{{t .Lang "autorestart.gate.tries.unit"}}</span>
+          </div>
+          <div class="note" style="margin-top:0.4rem">{{t .Lang "autorestart.gate.note"}}</div>
+        </div>
         <button type="submit">{{t .Lang "autorestart.submit"}}</button>
       </form>
       <script>

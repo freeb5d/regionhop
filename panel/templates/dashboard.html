@@ -58,6 +58,7 @@
         <button type="button" data-mode="tcp">{{t .Lang "probe.mode.tcp"}}</button>
         <button type="button" data-mode="http">{{t .Lang "probe.mode.http"}}</button>
         <button type="button" data-mode="real" class="active">{{t .Lang "probe.mode.real"}}</button>
+        <button type="button" data-mode="google">{{t .Lang "probe.mode.google"}}</button>
       </div>
       <button type="button" class="btn-sm" id="probe-test-all">{{t .Lang "probe.testall"}}</button>
       <span class="note" title="{{t .Lang "probe.tooltip"}}">ⓘ</span>
@@ -226,6 +227,8 @@
   var mode = "real";
   var timeoutMsg = {{t .Lang "probe.timeout"}};
   var ipTitle = {{t .Lang "probe.ip"}};
+  var googleOK = {{t .Lang "probe.google.ok"}};
+  var googleBlocked = {{t .Lang "probe.google.blocked"}};
 
   tabsEl.addEventListener("click", function (e) {
     var btn = e.target.closest("button[data-mode]");
@@ -235,6 +238,7 @@
   });
 
   function testRow(tr) {
+    var m = mode; // the tab at the time of the click, even if it is switched while "Test all" runs
     var name = tr.getAttribute("data-tunnel");
     var latencyEl = tr.querySelector('[data-role="latency"]');
     var btn = tr.querySelector('[data-role="check-btn"]');
@@ -242,25 +246,34 @@
     btn.disabled = true;
     latencyEl.textContent = "…";
     latencyEl.removeAttribute("title");
-    return fetch({{url "/tunnels/"}} + encodeURIComponent(name) + "/test?mode=" + mode, {
+    return fetch({{url "/tunnels/"}} + encodeURIComponent(name) + "/test?mode=" + m, {
       method: "POST", credentials: "same-origin"
     })
       .then(function (r) { return r.json(); })
       .then(function (res) {
-        if (res.ok) {
+        if (m === "google") {
+          // Green OK / red Blocked; the reason Google gave is in the tooltip.
+          latencyEl.textContent = "";
+          var badge = document.createElement("span");
+          var good = res.google === "ok";
+          badge.className = "badge " + (good ? "active" : "inactive");
+          badge.textContent = good ? googleOK : googleBlocked;
+          badge.title = res.detail || res.error || "";
+          latencyEl.appendChild(badge);
+        } else if (res.ok) {
           latencyEl.textContent = res.latencyMs + " ms";
-          if (res.ip) {
-            // The address comes from a third-party service: DOM text only, never innerHTML.
-            var ipEl = document.createElement("div");
-            ipEl.className = "note";
-            ipEl.style.fontSize = "0.75em";
-            ipEl.title = ipTitle;
-            ipEl.textContent = res.ip;
-            latencyEl.appendChild(ipEl);
-          }
         } else {
           latencyEl.textContent = timeoutMsg;
           latencyEl.title = res.error || "";
+        }
+        if (res.ok && res.ip) {
+          // The address comes from a third-party service: DOM text only, never innerHTML.
+          var ipEl = document.createElement("div");
+          ipEl.className = "note";
+          ipEl.style.fontSize = "0.75em";
+          ipEl.title = ipTitle;
+          ipEl.textContent = res.ip;
+          latencyEl.appendChild(ipEl);
         }
       })
       .catch(function () { latencyEl.textContent = timeoutMsg; })
