@@ -316,6 +316,8 @@ On the server, everything lives under `/opt/psi-panel/`:
   the ports regionhop itself assigned (kept in a dedicated `REGIONHOP-SOCKS`
   iptables chain), so other software on the same server — a 3x-ui panel or
   inbound that happens to use a port in 19000–19999, say — is never blocked.
+
+**SOCKS port range.** The installer asks which port range to use for the local SOCKS proxies. Press Enter for the default (19000–19999) or type your own, e.g. `30000-30999`. It is saved as `SOCKS_PORT_RANGE` in `/opt/psi-panel/panel.env`.
   New locations also skip any port something else is already listening on.
 - The panel itself: bcrypt password hash, HMAC-signed session cookies,
   `HttpOnly`/`SameSite=Strict` cookies, and a 5-attempt login lockout per

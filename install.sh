@@ -544,12 +544,38 @@ EOF
   systemctl enable regionhop-firewall.service
 }
 
+# Asks which port range the SOCKS proxies should use. Blank keeps the default
+# (19000-19999). Only asked on a first install from a terminal; the answer is
+# saved as SOCKS_PORT_RANGE in panel.env.
+ask_port_range() {
+  SOCKS_MIN=19000; SOCKS_MAX=19999
+  [[ -t 0 ]] || return 0
+  local ans lo hi
+  echo
+  echo "SOCKS port range: each location gets one local port from this range."
+  echo "Press Enter to use the default (19000-19999), or type your own, e.g. 30000-30999."
+  while true; do
+    read -rp "Port range [19000-19999]: " ans
+    ans=${ans// /}
+    [[ -z "$ans" ]] && return 0
+    if [[ "$ans" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      lo=$((10#${BASH_REMATCH[1]})); hi=$((10#${BASH_REMATCH[2]}))
+      if (( lo >= 1024 && hi <= 65535 && lo <= hi )); then
+        SOCKS_MIN=$lo; SOCKS_MAX=$hi
+        set_env_var SOCKS_PORT_RANGE "$lo-$hi"
+        return 0
+      fi
+    fi
+    echo "Invalid range. Use two numbers between 1024 and 65535, like 30000-30999." >&2
+  done
+}
+
 random_port() {
   # avoid well-known ranges and the socks range
   local p
   while true; do
     p=$(( (RANDOM % 20000) + 20000 ))
-    if [[ $p -lt 19000 || $p -gt 19999 ]]; then
+    if [[ $p -lt ${SOCKS_MIN:-19000} || $p -gt ${SOCKS_MAX:-19999} ]]; then
       echo "$p"
       return
     fi
@@ -604,6 +630,7 @@ random_path_prefix() {
 first_time_panel_setup() {
   [[ -f "$PANEL_ENV" ]] && return
   local port secret path_prefix
+  ask_port_range
   port=$(random_port)
   secret=$(head -c 32 /dev/urandom | xxd -p -c 32)
   path_prefix=$(random_path_prefix)

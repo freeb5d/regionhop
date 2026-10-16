@@ -59,9 +59,19 @@ const (
 	configsDir      = "/opt/psi-panel/configs"
 	dataDir         = "/opt/psi-panel/data"
 	coreVersionPath = "/opt/psi-panel/core/VERSION"
-	portBase        = 19000
-	portMax         = 19999
 )
+
+// SOCKS port range new locations are allocated from. Default 19000-19999;
+// install.sh can set SOCKS_PORT_RANGE=min-max in panel.env.
+var portBase, portMax = parsePortRange(os.Getenv("SOCKS_PORT_RANGE"))
+
+func parsePortRange(s string) (int, int) {
+	var lo, hi int
+	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d-%d", &lo, &hi); err != nil || lo < 1024 || hi > 65535 || lo > hi {
+		return 19000, 19999
+	}
+	return lo, hi
+}
 
 // coreVersion reads the short psiphon-tunnel-core commit hash that
 // ConsoleClient was built from, written alongside it at install time (see
