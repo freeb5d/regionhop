@@ -28,6 +28,7 @@
       <nav class="settings-nav" id="settings-nav" aria-label="{{t .Lang "settings.title"}}">
         <a href="#psiphon">{{t .Lang "creds.title"}}</a>
         <a href="#upstream">{{t .Lang "upstream.title"}}</a>
+        <a href="#xui">{{t .Lang "xui.title"}}</a>
         <a href="#autorestart">{{t .Lang "autorestart.title"}}</a>
         <a href="#backup">{{t .Lang "backup.title"}}</a>
       </nav>
@@ -111,6 +112,38 @@
               <span class="spacer"></span>
               <button type="button" class="btn-ghost" id="upstream-test-btn">{{t .Lang "upstream.test"}}</button>
               <button type="submit">{{t .Lang "upstream.submit"}}</button>
+            </footer>
+          </form>
+        </section>
+
+        <!-- ───────── 3x-ui ───────── -->
+        <section class="set-card" id="xui">
+          <header class="set-head">
+            <h2>{{t .Lang "xui.title"}}</h2>
+            <p>{{t .Lang "xui.desc"}}</p>
+          </header>
+          <form method="post" action="{{url "/settings/xui"}}" id="xui-form">
+            <div class="set-body">
+              {{if .XUISaved}}<div class="alert alert-success">{{t .Lang "xui.saved"}}</div>{{end}}
+              {{if .XUIError}}<div class="alert alert-error">{{.XUIError}}</div>{{end}}
+              <label class="check"><input type="checkbox" name="xui_enabled" value="1" {{if .XUI.Enabled}}checked{{end}}> {{t .Lang "xui.enable"}}</label>
+              <div class="field">
+                <label for="xui-url">{{t .Lang "xui.url"}}</label>
+                <input type="text" id="xui-url" name="xui_url" autocomplete="off" spellcheck="false" value="{{.XUI.URL}}" placeholder="http://127.0.0.1:2053/yourpath">
+              </div>
+              <div class="field">
+                <label for="xui-token">{{t .Lang "xui.token"}}</label>
+                <input type="password" id="xui-token" name="xui_token" autocomplete="new-password" spellcheck="false" placeholder="{{if .XUI.HasToken}}{{t .Lang "xui.token.saved"}}{{else}}{{t .Lang "xui.token.hint"}}{{end}}">
+              </div>
+              <p class="hint">{{t .Lang "xui.note"}}</p>
+              {{if .XUI.LastSync}}<p class="hint">{{t .Lang "xui.last"}}: {{.XUI.LastSync}}{{if .XUI.LastError}} — {{.XUI.LastError}}{{end}}</p>{{end}}
+              <div class="test-result" id="xui-result" role="status" aria-live="polite"></div>
+            </div>
+            <footer class="set-foot">
+              <span class="spacer"></span>
+              <button type="button" class="btn-ghost" id="xui-test-btn">{{t .Lang "xui.test"}}</button>
+              <button type="button" class="btn-ghost" id="xui-sync-btn">{{t .Lang "xui.sync"}}</button>
+              <button type="submit">{{t .Lang "xui.submit"}}</button>
             </footer>
           </form>
         </section>
@@ -262,6 +295,30 @@
         })
         .catch(function () { out.className = "test-result err"; out.textContent = "✕ " + {{t .Lang "upstream.test.fail"}}; })
         .finally(function () { btn.disabled = mode.value === "none"; });
+    });
+  })();
+
+  // 3x-ui: Test reads 3x-ui's config with the form's values; Sync pushes the outbounds now.
+  (function () {
+    var out = $("xui-result"), tb = $("xui-test-btn"), sb = $("xui-sync-btn");
+    function run(btn, path, body, okText) {
+      btn.disabled = true;
+      out.className = "test-result";
+      out.textContent = {{t .Lang "xui.working"}};
+      fetch(path, { method: "POST", body: body, credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.ok) { out.className = "test-result ok"; out.textContent = "✓ " + okText(res); }
+          else { out.className = "test-result err"; out.textContent = "✕ " + (res.error || "?"); }
+        })
+        .catch(function () { out.className = "test-result err"; out.textContent = "✕ " + {{t .Lang "xui.fail"}}; })
+        .finally(function () { btn.disabled = false; });
+    }
+    tb.addEventListener("click", function () {
+      run(tb, {{url "/settings/xui/test"}}, new URLSearchParams(new FormData($("xui-form"))), function () { return {{t .Lang "xui.ok"}}; });
+    });
+    sb.addEventListener("click", function () {
+      run(sb, {{url "/settings/xui/sync"}}, null, function (res) { return res.changed ? {{t .Lang "xui.synced"}} : {{t .Lang "xui.nochange"}}; });
     });
   })();
 

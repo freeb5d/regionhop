@@ -239,6 +239,25 @@ itself supports it).
 
 The upstream is included in [backups](#updating) too.
 
+## Connect it to 3x-ui
+
+If you use a 3x-ui panel on the same server, regionhop can add every location
+to it as a SOCKS **outbound**, so you can route inbounds or users through a
+location with 3x-ui's own routing rules.
+
+1. In 3x-ui open **Settings → Security → API Token** and create a token.
+2. In regionhop open **Settings → 3x-ui panel**, tick *Send my locations to
+   3x-ui*, paste the panel address (with its web path, e.g.
+   `http://127.0.0.1:2053/yourpath`) and the token, and press **Test**, then
+   **Save**.
+
+Each location becomes an outbound named `regionhop-<name>` that points at its
+local SOCKS port. Adding a location creates its outbound, removing one deletes
+it, and the panel re-syncs when it starts. Only outbounds with the
+`regionhop-` prefix are ever touched, and nothing is written unless something
+changed (saving in 3x-ui restarts its Xray). The token is stored on the
+server in `/opt/psi-panel/data/xui.json` (mode 0600) and never shown again.
+
 ## Managing it over SSH
 
 ```bash
