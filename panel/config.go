@@ -114,6 +114,9 @@ func writeTunnelConfig(configsDir, dataDir string, t Tunnel, creds psiphonCreds)
 	setDefault(cfg, "DisableLocalHTTPProxy", true)
 	setDefault(cfg, "EmitDiagnosticNotices", true)
 	setDefault(cfg, "UseIndistinguishableTLS", true)
+	// Psiphon gives up establishing a tunnel after 300s by default; 0 means keep
+	// trying until it connects.
+	setDefault(cfg, "EstablishTunnelTimeoutSeconds", 0)
 
 	// The panel's own upstream setting wins over one in the pasted JSON;
 	// when unset, whatever the pasted JSON says (if anything) stands.
@@ -144,4 +147,29 @@ func setDefault(m map[string]any, key string, val any) {
 
 func removeTunnelConfig(configsDir string, name string) error {
 	return os.Remove(filepath.Join(configsDir, name+".json"))
+}
+
+// ensureNoEstablishTimeout adds EstablishTunnelTimeoutSeconds=0 to saved
+// location configs written before regionhop set it, so they too keep trying
+// instead of giving up after Psiphon's 300s default. A value the user set is
+// left alone. Takes effect the next time each location restarts.
+func ensureNoEstablishTimeout(dir string) {
+	files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		cfg := map[string]any{}
+		if json.Unmarshal(b, &cfg) != nil {
+			continue
+		}
+		if _, ok := cfg["EstablishTunnelTimeoutSeconds"]; ok {
+			continue
+		}
+		cfg["EstablishTunnelTimeoutSeconds"] = 0
+		if out, err := json.MarshalIndent(cfg, "", "  "); err == nil {
+			os.WriteFile(f, out, 0o600)
+		}
+	}
 }

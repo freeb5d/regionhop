@@ -121,6 +121,7 @@ func main() {
 
 	startUpdateChecker(1 * time.Hour)
 	a.startAutoRestart()
+	ensureNoEstablishTimeout(configsDir)
 	xuiSyncAsync()
 
 	// Everything is served under basePath (e.g. "/x7k9m2p4") when

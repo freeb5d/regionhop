@@ -2,11 +2,12 @@
 Description=Psiphon tunnel instance for location %i
 After=network-online.target regionhop-upstream.service
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=/opt/psi-panel/core/ConsoleClient -config /opt/psi-panel/configs/%i.json
-Restart=on-failure
+Restart=always
 RestartSec=5
 User=psipanel
 Group=psipanel
