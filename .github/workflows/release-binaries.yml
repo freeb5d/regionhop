@@ -107,6 +107,41 @@ jobs:
           must '--dport 19013' "$rules"; mustnot '--dport 19002' "$rules"
           echo "firewall sync OK"
 
+      - name: Panel SSL certificate helper test (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          # Extract the root helper exactly as install.sh embeds it.
+          awk '/install-cert\.sh" <<.EOF.$/{f=1;next} /^EOF$/{if(f){exit}} f' install.sh > "$work/h.sh"
+          test -s "$work/h.sh"
+          me=$(id -un)
+          sed -i "s#__PREFIX__#$work/pfx#; s#__SERVICE_USER__#$me#" "$work/h.sh"
+          cd "$work"
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -subj "/CN=t.example" -days 30 2>/dev/null
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout k2.pem -out c2.pem -subj "/CN=o.example" -days 30 2>/dev/null
+          # A matching pair is installed (root-run, as sudo does).
+          out=$(sudo bash h.sh c.pem k.pem); echo "$out"
+          grep -q 'subject=' <<<"$out"; grep -q 'notAfter=' <<<"$out"
+          test -s pfx/data/ssl/cert.pem; test -s pfx/data/ssl/key.pem
+          [ "$(stat -c %a pfx/data/ssl/key.pem)" = 600 ]
+          [ "$(stat -c %U pfx/data/ssl/key.pem)" = "$me" ]
+          # A symlinked source (like letsencrypt/live) works too.
+          ln -s "$work/c2.pem" link.pem; ln -s "$work/k2.pem" linkk.pem
+          sudo bash h.sh link.pem linkk.pem >/dev/null
+          cmp pfx/data/ssl/cert.pem c2.pem
+          # Everything else must be refused and leave the installed pair alone.
+          before=$(sha256sum pfx/data/ssl/cert.pem)
+          must_fail() { if sudo bash h.sh "$@" >/dev/null 2>&1; then echo "SHOULD HAVE FAILED: $*"; exit 1; fi; }
+          must_fail c.pem k2.pem                       # mismatched pair
+          echo 'root:x:0:0:root' > shadow; must_fail shadow k.pem
+          must_fail k.pem k.pem                        # a key is not a certificate
+          { echo 'junk'; cat c.pem; } > cj.pem; must_fail cj.pem k.pem
+          must_fail c.pem                              # wrong argument count
+          must_fail nope.pem k.pem
+          [ "$before" = "$(sha256sum pfx/data/ssl/cert.pem)" ]
+          echo "ssl helper OK"
+
       - name: Build psi-panel + ConsoleClient and pack per-architecture bundles
         run: |
           set -euo pipefail

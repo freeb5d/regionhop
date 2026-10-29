@@ -138,6 +138,7 @@ setup_sudo_control() {
 
   install_self_update_script
   install_sudoers_refresh_script
+  install_cert_script
   "$ADMIN_DIR/refresh-sudoers.sh"
 }
 
@@ -190,8 +191,9 @@ tmp=$(mktemp)
   echo "Cmnd_Alias REGIONHOP_PANEL_RESTART = $SYSTEMCTL restart psi-panel"
   echo "Cmnd_Alias REGIONHOP_SELF_UPDATE = $ADMIN_DIR/self-update.sh"
   echo "Cmnd_Alias REGIONHOP_SUDOERS_REFRESH = $ADMIN_DIR/refresh-sudoers.sh"
+  echo "Cmnd_Alias REGIONHOP_CERT = $ADMIN_DIR/install-cert.sh *"
   echo "Cmnd_Alias REGIONHOP_UPSTREAM = $SYSTEMCTL enable --now regionhop-upstream.service, $SYSTEMCTL disable --now regionhop-upstream.service, $SYSTEMCTL restart regionhop-upstream.service"
-  echo "$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE, REGIONHOP_SUDOERS_REFRESH, REGIONHOP_UPSTREAM"
+  echo "$SERVICE_USER ALL=(root) NOPASSWD: REGIONHOP_TUNNEL_ENABLE, REGIONHOP_TUNNEL_DISABLE, REGIONHOP_TUNNEL_RESTART, REGIONHOP_PANEL_RESTART, REGIONHOP_SELF_UPDATE, REGIONHOP_SUDOERS_REFRESH, REGIONHOP_CERT, REGIONHOP_UPSTREAM"
 } > "$tmp"
 
 if visudo -c -f "$tmp" &>/dev/null; then
@@ -214,6 +216,51 @@ EOF
     "$ADMIN_DIR/refresh-sudoers.sh"
   chown root:root "$ADMIN_DIR/refresh-sudoers.sh"
   chmod 0700 "$ADMIN_DIR/refresh-sudoers.sh"
+}
+
+# Root helper behind the panel's "Enable SSL" setting. psipanel may run it
+# (exact path, via sudo) with a certificate file and a key file. It only
+# accepts a PEM certificate chain plus a matching unencrypted private key,
+# and copies re-validated content into the panel's data directory, so it
+# can't be used to read arbitrary root files.
+install_cert_script() {
+  mkdir -p "$ADMIN_DIR"
+  chown root:root "$ADMIN_DIR"
+  chmod 0700 "$ADMIN_DIR"
+  cat > "$ADMIN_DIR/install-cert.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+DEST="__PREFIX__/data/ssl"
+SERVICE_USER="__SERVICE_USER__"
+fail() { echo "$*" >&2; exit 1; }
+[[ $# -eq 2 ]] || fail "usage: install-cert.sh CERT KEY"
+command -v openssl >/dev/null || fail "openssl is not installed on this server"
+cert=$(readlink -f -- "$1" 2>/dev/null || true)
+key=$(readlink -f -- "$2" 2>/dev/null || true)
+[[ -f "$cert" ]] || fail "certificate file not found: $1"
+[[ -f "$key" ]] || fail "key file not found: $2"
+openssl x509 -in "$cert" -noout 2>/dev/null || fail "$1 is not a PEM certificate"
+openssl pkey -in "$key" -noout -passin pass: 2>/dev/null || fail "$2 is not an unencrypted PEM private key"
+if grep -qvE '^(-----(BEGIN|END) CERTIFICATE-----|[A-Za-z0-9+/=]*)$' "$cert"; then
+  fail "$1 contains more than certificates"
+fi
+[[ "$(openssl x509 -in "$cert" -noout -pubkey | openssl sha256)" == "$(openssl pkey -in "$key" -pubout -passin pass: | openssl sha256)" ]] \
+  || fail "the certificate and the key do not belong together"
+openssl x509 -in "$cert" -noout -checkend 0 >/dev/null || fail "the certificate has expired"
+install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DEST"
+tmpk=$(mktemp "$DEST/key.XXXXXX"); tmpc=$(mktemp "$DEST/cert.XXXXXX")
+trap 'rm -f "$tmpk" "$tmpc"' EXIT
+openssl pkey -in "$key" -out "$tmpk" -passin pass:
+cat "$cert" > "$tmpc"
+chown "$SERVICE_USER:$SERVICE_USER" "$tmpk" "$tmpc"
+chmod 0600 "$tmpk" "$tmpc"
+mv -f "$tmpk" "$DEST/key.pem"
+mv -f "$tmpc" "$DEST/cert.pem"
+openssl x509 -in "$cert" -noout -subject -enddate
+EOF
+  sed -i -e "s#__PREFIX__#$PREFIX#" -e "s#__SERVICE_USER__#$SERVICE_USER#" "$ADMIN_DIR/install-cert.sh"
+  chown root:root "$ADMIN_DIR/install-cert.sh"
+  chmod 0700 "$ADMIN_DIR/install-cert.sh"
 }
 
 install_self_update_script() {

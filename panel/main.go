@@ -122,6 +122,7 @@ func main() {
 	startUpdateChecker(1 * time.Hour)
 	a.startAutoRestart()
 	ensureNoEstablishTimeout(configsDir)
+	startSSL()
 	xuiSyncAsync()
 
 	// Everything is served under basePath (e.g. "/x7k9m2p4") when
@@ -144,6 +145,8 @@ func main() {
 	mux.HandleFunc(basePath+"/settings", a.requireAuth(a.handleSettings))
 	mux.HandleFunc(basePath+"/settings/upstream", a.requireAuth(a.handleUpstream))
 	mux.HandleFunc(basePath+"/settings/upstream/test", a.requireAuth(a.handleUpstreamTest))
+	mux.HandleFunc(basePath+"/settings/ssl", a.requireAuth(a.handleSSL))
+	mux.HandleFunc(basePath+"/settings/ssl/from-xui", a.requireAuth(a.handleSSLFromXUI))
 	mux.HandleFunc(basePath+"/settings/xui", a.requireAuth(a.handleXUI))
 	mux.HandleFunc(basePath+"/settings/xui/test", a.requireAuth(a.handleXUITest))
 	mux.HandleFunc(basePath+"/settings/xui/sync", a.requireAuth(a.handleXUISync))
@@ -158,16 +161,21 @@ func main() {
 	// and exhaust the panel's file descriptors without ever logging in.
 	// WriteTimeout is generous because a backup import starts every
 	// restored location before it responds.
-	srv := &http.Server{
-		Addr:              listenAddr,
-		Handler:           securityHeaders(mux),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       2 * time.Minute,
-		WriteTimeout:      5 * time.Minute,
-		IdleTimeout:       2 * time.Minute,
-		MaxHeaderBytes:    16 << 10,
+	newSrv := func(h http.Handler) *http.Server {
+		return &http.Server{
+			Addr:              listenAddr,
+			Handler:           h,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       2 * time.Minute,
+			WriteTimeout:      5 * time.Minute,
+			IdleTimeout:       2 * time.Minute,
+			MaxHeaderBytes:    16 << 10,
+		}
 	}
-	log.Fatal(srv.ListenAndServe())
+	// Plain and TLS connections share the port (see ssl.go); the plain side
+	// redirects to https while SSL is on.
+	h := securityHeaders(mux)
+	log.Fatal(serveMixed(listenAddr, newSrv(redirectWhenSSL(h)), newSrv(h)))
 }
 
 // securityHeaders sets defensive headers on every response. The CSP only
@@ -569,6 +577,7 @@ func credsTemplateData(c psiphonCreds, saved bool, errMsg string) map[string]any
 		"UpstreamState": upstreamServiceState(),
 		"XrayAvailable": xrayErr == nil,
 		"XUI":           xuiTemplateData(),
+		"SSL":           sslTemplateData(),
 	}
 	for k, v := range autoRestartTemplateData() {
 		data[k] = v

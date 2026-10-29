@@ -29,6 +29,7 @@
         <a href="#psiphon">{{t .Lang "creds.title"}}</a>
         <a href="#upstream">{{t .Lang "upstream.title"}}</a>
         <a href="#xui">{{t .Lang "xui.title"}}</a>
+        <a href="#ssl">{{t .Lang "ssl.title"}}</a>
         <a href="#autorestart">{{t .Lang "autorestart.title"}}</a>
         <a href="#backup">{{t .Lang "backup.title"}}</a>
       </nav>
@@ -144,6 +145,37 @@
               <button type="button" class="btn-ghost" id="xui-test-btn">{{t .Lang "xui.test"}}</button>
               <button type="button" class="btn-ghost" id="xui-sync-btn">{{t .Lang "xui.sync"}}</button>
               <button type="submit">{{t .Lang "xui.submit"}}</button>
+            </footer>
+          </form>
+        </section>
+
+        <!-- ───────── SSL ───────── -->
+        <section class="set-card" id="ssl">
+          <header class="set-head">
+            <h2>{{t .Lang "ssl.title"}}</h2>
+            <p>{{t .Lang "ssl.desc"}}</p>
+          </header>
+          <form method="post" action="{{url "/settings/ssl"}}" id="ssl-form">
+            <div class="set-body">
+              {{if .SSLSaved}}<div class="alert alert-success">{{t .Lang "ssl.saved"}}{{if .SSL.Active}} <a id="ssl-link" href="#">{{t .Lang "ssl.open"}}</a>{{end}}</div>{{end}}
+              {{if .SSLError}}<div class="alert alert-error">{{.SSLError}}</div>{{end}}
+              <label class="check"><input type="checkbox" name="ssl_enabled" value="1" {{if .SSL.Enabled}}checked{{end}}> {{t .Lang "ssl.enable"}}</label>
+              <div class="field">
+                <label for="ssl-cert">{{t .Lang "ssl.cert"}}</label>
+                <input type="text" id="ssl-cert" name="ssl_cert" autocomplete="off" spellcheck="false" dir="ltr" value="{{.SSL.CertSrc}}" placeholder="/root/cert/example.com/fullchain.pem">
+              </div>
+              <div class="field">
+                <label for="ssl-key">{{t .Lang "ssl.key"}}</label>
+                <input type="text" id="ssl-key" name="ssl_key" autocomplete="off" spellcheck="false" dir="ltr" value="{{.SSL.KeySrc}}" placeholder="/root/cert/example.com/privkey.pem">
+              </div>
+              <p class="hint">{{t .Lang "ssl.note"}}</p>
+              {{if .SSL.HasCert}}<p class="hint">{{t .Lang "ssl.installed"}}: <span dir="ltr">{{.SSL.Subject}}{{if .SSL.Expires}} · {{.SSL.Expires}}{{end}}</span>{{if .SSL.LastError}} — {{.SSL.LastError}}{{end}}</p>{{end}}
+              <div class="test-result" id="ssl-result" role="status" aria-live="polite"></div>
+            </div>
+            <footer class="set-foot">
+              <span class="spacer"></span>
+              <button type="button" class="btn-ghost" id="ssl-xui-btn">{{t .Lang "ssl.fromxui"}}</button>
+              <button type="submit">{{t .Lang "ssl.submit"}}</button>
             </footer>
           </form>
         </section>
@@ -319,6 +351,27 @@
     });
     sb.addEventListener("click", function () {
       run(sb, {{url "/settings/xui/sync"}}, null, function (res) { return res.changed ? {{t .Lang "xui.synced"}} : {{t .Lang "xui.nochange"}}; });
+    });
+  })();
+
+  // SSL: optionally fill the two paths from the 3x-ui panel; typing them by hand always works.
+  (function () {
+    var btn = $("ssl-xui-btn"), out = $("ssl-result"), link = $("ssl-link");
+    if (link) { link.href = "https://" + location.host + location.pathname; }
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      out.className = "test-result";
+      out.textContent = {{t .Lang "ssl.working"}};
+      fetch({{url "/settings/ssl/from-xui"}}, { method: "POST", credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.ok) {
+            $("ssl-cert").value = res.cert; $("ssl-key").value = res.key;
+            out.className = "test-result ok"; out.textContent = "✓ " + {{t .Lang "ssl.filled"}};
+          } else { out.className = "test-result err"; out.textContent = "✕ " + (res.error || "?"); }
+        })
+        .catch(function () { out.className = "test-result err"; out.textContent = "✕ ?"; })
+        .finally(function () { btn.disabled = false; });
     });
   })();
 

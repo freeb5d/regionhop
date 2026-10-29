@@ -258,6 +258,22 @@ it, and the panel re-syncs when it starts. Only outbounds with the
 changed (saving in 3x-ui restarts its Xray). The token is stored on the
 server in `/opt/psi-panel/data/xui.json` (mode 0600) and never shown again.
 
+## HTTPS for the panel
+
+**Settings → SSL (HTTPS)** serves the panel over HTTPS with a certificate you
+already have. Enter the full paths of the certificate file (full chain) and the
+private key file on the server, for example `/root/cert/example.com/fullchain.pem`
+and `/root/cert/example.com/privkey.pem`, tick *Enable SSL* and save. If you
+also connected 3x-ui (see above), **Fill from 3x-ui** reads those two paths from
+its settings for you.
+
+The files are checked (a real certificate, an unencrypted key that matches it,
+not expired), copied into the panel's data folder by a small root helper, and
+copied again every 12 hours so a renewed certificate is picked up. HTTPS uses
+the same port as before; while SSL is on, `http://` links redirect to
+`https://`. Turn it off in the same place. The helper only accepts PEM
+certificates and matching keys, so it can't be used to read other files.
+
 ## Managing it over SSH
 
 ```bash
