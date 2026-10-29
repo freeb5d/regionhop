@@ -130,6 +130,12 @@ jobs:
           ln -s "$work/c2.pem" link.pem; ln -s "$work/k2.pem" linkk.pem
           sudo bash h.sh link.pem linkk.pem >/dev/null
           cmp pfx/data/ssl/cert.pem c2.pem
+          # A chain with several certificates, and a CRLF file, are fine.
+          cat c.pem c2.pem > chain.pem; sudo bash h.sh chain.pem k.pem >/dev/null
+          [ "$(grep -c 'BEGIN CERTIFICATE' pfx/data/ssl/cert.pem)" = 2 ]
+          sed 's/$/\r/' c.pem > crlf.pem; sudo bash h.sh crlf.pem k.pem >/dev/null
+          ! grep -q $'\r' pfx/data/ssl/cert.pem
+          sudo bash h.sh link.pem linkk.pem >/dev/null   # leave a known pair installed
           # Everything else must be refused and leave the installed pair alone.
           before=$(sha256sum pfx/data/ssl/cert.pem)
           must_fail() { if sudo bash h.sh "$@" >/dev/null 2>&1; then echo "SHOULD HAVE FAILED: $*"; exit 1; fi; }
@@ -137,6 +143,8 @@ jobs:
           echo 'root:x:0:0:root' > shadow; must_fail shadow k.pem
           must_fail k.pem k.pem                        # a key is not a certificate
           { echo 'junk'; cat c.pem; } > cj.pem; must_fail cj.pem k.pem
+          { cat c.pem; echo junk; } > cj2.pem; must_fail cj2.pem k.pem   # text after the certificate
+          { cat c.pem; cat k.pem; } > cj3.pem; must_fail cj3.pem k.pem   # a key riding along in the cert file
           must_fail c.pem                              # wrong argument count
           must_fail nope.pem k.pem
           [ "$before" = "$(sha256sum pfx/data/ssl/cert.pem)" ]

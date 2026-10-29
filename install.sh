@@ -241,9 +241,6 @@ key=$(readlink -f -- "$2" 2>/dev/null || true)
 [[ -f "$key" ]] || fail "key file not found: $2"
 openssl x509 -in "$cert" -noout 2>/dev/null || fail "$1 is not a PEM certificate"
 openssl pkey -in "$key" -noout -passin pass: 2>/dev/null || fail "$2 is not an unencrypted PEM private key"
-if grep -qvE '^(-----(BEGIN|END) CERTIFICATE-----|[A-Za-z0-9+/=]*)$' "$cert"; then
-  fail "$1 contains more than certificates"
-fi
 [[ "$(openssl x509 -in "$cert" -noout -pubkey | openssl sha256)" == "$(openssl pkey -in "$key" -pubout -passin pass: | openssl sha256)" ]] \
   || fail "the certificate and the key do not belong together"
 openssl x509 -in "$cert" -noout -checkend 0 >/dev/null || fail "the certificate has expired"
@@ -251,7 +248,17 @@ install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$DEST"
 tmpk=$(mktemp "$DEST/key.XXXXXX"); tmpc=$(mktemp "$DEST/cert.XXXXXX")
 trap 'rm -f "$tmpk" "$tmpc"' EXIT
 openssl pkey -in "$key" -out "$tmpk" -passin pass:
-cat "$cert" > "$tmpc"
+# Copy only well-formed certificate blocks; anything else in the file
+# (stray text, other keys) makes the whole file be refused.
+awk '
+  /^-----BEGIN CERTIFICATE-----\r?$/ { if (inb) bad = 1; inb = 1; sub(/\r$/, ""); print; next }
+  /^-----END CERTIFICATE-----\r?$/   { if (!inb) bad = 1; inb = 0; n++; sub(/\r$/, ""); print; next }
+  inb && /^[A-Za-z0-9+\/=]+\r?$/      { sub(/\r$/, ""); print; next }
+  /^[ \t\r]*$/                        { next }
+  { bad = 1 }
+  END { if (bad || inb || n == 0) exit 1 }
+' "$cert" > "$tmpc" || fail "$1 contains more than certificates"
+openssl x509 -in "$tmpc" -noout 2>/dev/null || fail "$1 is not a valid certificate chain"
 chown "$SERVICE_USER:$SERVICE_USER" "$tmpk" "$tmpc"
 chmod 0600 "$tmpk" "$tmpc"
 mv -f "$tmpk" "$DEST/key.pem"
