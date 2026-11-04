@@ -156,6 +156,12 @@ Psiphon 需要一份由 [Psiphon Inc.](https://psiphon.ca) 作为注册合作伙
 | <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e8-1f1e6.svg" width="20" alt="CA"> | Canada | `CA` |
 | <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1fa-1f1f8.svg" width="20" alt="US"> | United States | `US` |
 
+**南美洲 🌎**
+
+| | 地区 | 代码 |
+|---|---|---|
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e7-1f1f7.svg" width="20" alt="BR"> | Brazil | `BR` |
+
 **大洋洲 🌏**
 
 | | 地区 | 代码 |

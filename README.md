@@ -202,6 +202,12 @@ preference)**, which lets Psiphon choose.
 | <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e8-1f1e6.svg" width="20" alt="CA"> | Canada | `CA` |
 | <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1fa-1f1f8.svg" width="20" alt="US"> | United States | `US` |
 
+**South America 🌎**
+
+| | Region | Code |
+|---|---|---|
+| <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f1e7-1f1f7.svg" width="20" alt="BR"> | Brazil | `BR` |
+
 **Oceania 🌏**
 
 | | Region | Code |

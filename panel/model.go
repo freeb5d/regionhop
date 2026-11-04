@@ -52,6 +52,7 @@ var regionCodes = map[string]string{
 	"SG": "Singapore",
 	"CA": "Canada",
 	"US": "United States",
+	"BR": "Brazil",
 	"AU": "Australia",
 }
 
