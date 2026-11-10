@@ -93,38 +93,65 @@ func xuiClient(base string) *http.Client {
 
 // xuiCall POSTs a form to a 3x-ui API path with the Bearer token and returns
 // the "obj" of the {success,msg,obj} envelope.
-func xuiCall(s xuiSettings, path string, form url.Values) (json.RawMessage, error) {
-	req, err := http.NewRequest(http.MethodPost, s.URL+path, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+s.Token)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	resp, err := xuiClient(s.URL).Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("can't reach 3x-ui: %v", err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	var env struct {
-		Success bool            `json:"success"`
-		Msg     string          `json:"msg"`
-		Obj     json.RawMessage `json:"obj"`
-	}
-	if json.Unmarshal(body, &env) != nil {
-		if resp.StatusCode == http.StatusNotFound || resp.StatusCode/100 == 3 {
-			return nil, fmt.Errorf("3x-ui answered %d: check the address and its web path, and that 3x-ui is a recent version with API tokens", resp.StatusCode)
+//
+// If 3x-ui answers a plain http:// request with a redirect to the https://
+// version of the same address (what it does when SSL is on), the settings'
+// URL is upgraded in place and the call is repeated once; callers that save
+// the settings then keep the working address.
+func xuiCall(s *xuiSettings, path string, form url.Values) (json.RawMessage, error) {
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequest(http.MethodPost, s.URL+path, strings.NewReader(form.Encode()))
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("that isn't a 3x-ui API response (HTTP %d): check the address and the token", resp.StatusCode)
-	}
-	if !env.Success {
-		if env.Msg == "" {
-			env.Msg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		req.Header.Set("Authorization", "Bearer "+s.Token)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "application/json")
+		// Without this 3x-ui answers a rejected request with a 307 redirect to
+		// its login page; with it, a JSON error that says what is wrong.
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		resp, err := xuiClient(s.URL).Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("can't reach 3x-ui: %v", err)
 		}
-		return nil, fmt.Errorf("3x-ui refused the request: %s", env.Msg)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		resp.Body.Close()
+
+		if resp.StatusCode/100 == 3 {
+			loc, _ := resp.Location()
+			if attempt == 0 && loc != nil && req.URL.Scheme == "http" && loc.Scheme == "https" && loc.Host == req.URL.Host {
+				s.URL = "https://" + strings.TrimPrefix(s.URL, "http://")
+				continue
+			}
+			where := ""
+			if loc != nil {
+				where = " to " + loc.String()
+			}
+			return nil, fmt.Errorf("3x-ui redirected the request%s: check the address and its web path, and that the API token is valid and 3x-ui is a recent version with API tokens", where)
+		}
+
+		var env struct {
+			Success bool            `json:"success"`
+			Msg     string          `json:"msg"`
+			Obj     json.RawMessage `json:"obj"`
+		}
+		if json.Unmarshal(body, &env) != nil {
+			if resp.StatusCode == http.StatusNotFound {
+				return nil, fmt.Errorf("3x-ui answered 404: check the address and its web path, and that 3x-ui is a recent version with API tokens")
+			}
+			return nil, fmt.Errorf("that isn't a 3x-ui API response (HTTP %d): check the address and the token", resp.StatusCode)
+		}
+		if !env.Success {
+			if env.Msg == "" {
+				env.Msg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+			}
+			if resp.StatusCode == http.StatusUnauthorized {
+				env.Msg += " (the API token was not accepted)"
+			}
+			return nil, fmt.Errorf("3x-ui refused the request: %s", env.Msg)
+		}
+		return env.Obj, nil
 	}
-	return env.Obj, nil
 }
 
 // unquoteJSON returns the JSON inside a value that 3x-ui sometimes sends as a
@@ -138,7 +165,7 @@ func unquoteJSON(raw json.RawMessage) json.RawMessage {
 }
 
 // xuiGetConfig reads the Xray config template and the outbound test URL.
-func xuiGetConfig(s xuiSettings) (map[string]json.RawMessage, string, error) {
+func xuiGetConfig(s *xuiSettings) (map[string]json.RawMessage, string, error) {
 	obj, err := xuiCall(s, "/panel/api/xray/", url.Values{})
 	if err != nil {
 		return nil, "", err
@@ -222,7 +249,7 @@ func mergeOutbounds(existing []json.RawMessage, want map[string]int) ([]json.Raw
 
 // xuiApply makes 3x-ui's outbounds match want. It writes only when something
 // differs, because saving restarts 3x-ui's Xray.
-func xuiApply(s xuiSettings, want map[string]int) (bool, error) {
+func xuiApply(s *xuiSettings, want map[string]int) (bool, error) {
 	cfg, testURL, err := xuiGetConfig(s)
 	if err != nil {
 		return false, err
@@ -279,7 +306,7 @@ func xuiSync() (changed bool, err error) {
 	for _, t := range list {
 		want[t.Name] = t.SocksPort
 	}
-	return xuiApply(s, want)
+	return xuiApply(&s, want)
 }
 
 // xuiSyncAsync is what add/remove/startup call: it must never slow down or

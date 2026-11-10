@@ -264,6 +264,10 @@ it, and the panel re-syncs when it starts. Only outbounds with the
 changed (saving in 3x-ui restarts its Xray). The token is stored on the
 server in `/opt/psi-panel/data/xui.json` (mode 0600) and never shown again.
 
+If your 3x-ui uses HTTPS but you typed an `http://` address, regionhop follows
+3x-ui's redirect and switches to the `https://` address by itself. If the
+token is wrong or the web path is wrong, the error says which one it looks like.
+
 ## HTTPS for the panel
 
 **Settings → SSL (HTTPS)** serves the panel over HTTPS with a certificate you

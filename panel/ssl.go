@@ -238,7 +238,7 @@ func redirectWhenSSL(h http.Handler) http.Handler {
 
 // ---- reading the paths from 3x-ui ----
 
-func xuiCertPaths(s xuiSettings) (cert, key string, err error) {
+func xuiCertPaths(s *xuiSettings) (cert, key string, err error) {
 	if s.URL == "" || s.Token == "" {
 		return "", "", fmt.Errorf("set up the 3x-ui connection first (the 3x-ui section above)")
 	}
@@ -328,7 +328,16 @@ func (a *app) handleSSLFromXUI(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	cert, key, err := xuiCertPaths(loadXUI())
+	xs := loadXUI()
+	before := xs.URL
+	cert, key, err := xuiCertPaths(&xs)
+	if xs.URL != before { // 3x-ui redirected to https: keep the working address
+		xuiMu.Lock()
+		cur := loadXUI()
+		cur.URL = xs.URL
+		saveXUI(cur)
+		xuiMu.Unlock()
+	}
 	res := map[string]any{"ok": err == nil}
 	if err != nil {
 		res["error"] = err.Error()

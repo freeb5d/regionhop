@@ -347,7 +347,7 @@
         .finally(function () { btn.disabled = false; });
     }
     tb.addEventListener("click", function () {
-      run(tb, {{url "/settings/xui/test"}}, new URLSearchParams(new FormData($("xui-form"))), function () { return {{t .Lang "xui.ok"}}; });
+      run(tb, {{url "/settings/xui/test"}}, new URLSearchParams(new FormData($("xui-form"))), function (res) { if (res.url) { $("xui-url").value = res.url; } return {{t .Lang "xui.ok"}}; });
     });
     sb.addEventListener("click", function () {
       run(sb, {{url "/settings/xui/sync"}}, null, function (res) { return res.changed ? {{t .Lang "xui.synced"}} : {{t .Lang "xui.nochange"}}; });

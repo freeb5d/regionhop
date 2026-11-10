@@ -44,6 +44,7 @@ type xuiResult struct {
 	OK      bool   `json:"ok"`
 	Error   string `json:"error,omitempty"`
 	Changed bool   `json:"changed,omitempty"`
+	URL     string `json:"url,omitempty"` // the address that worked, when it had to change
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -105,13 +106,13 @@ func (a *app) handleXUITest(w http.ResponseWriter, r *http.Request) {
 		err = errString("paste the API token from 3x-ui")
 	}
 	if err == nil {
-		_, _, err = xuiGetConfig(s)
+		_, _, err = xuiGetConfig(&s)
 	}
 	if err != nil {
 		writeJSON(w, xuiResult{Error: err.Error()})
 		return
 	}
-	writeJSON(w, xuiResult{OK: true})
+	writeJSON(w, xuiResult{OK: true, URL: s.URL})
 }
 
 func (a *app) handleXUISync(w http.ResponseWriter, r *http.Request) {

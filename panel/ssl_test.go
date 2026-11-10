@@ -81,11 +81,11 @@ func TestXUICertPaths(t *testing.T) {
 		w.Write([]byte(`{"success":true,"obj":{"webCertFile":"/root/cert/x/fullchain.pem","webKeyFile":"/root/cert/x/privkey.pem"}}`))
 	}))
 	defer srv.Close()
-	c, k, err := xuiCertPaths(xuiSettings{URL: srv.URL + "/b", Token: "tok"})
+	c, k, err := xuiCertPaths(&xuiSettings{URL: srv.URL + "/b", Token: "tok"})
 	if err != nil || c != "/root/cert/x/fullchain.pem" || k != "/root/cert/x/privkey.pem" {
 		t.Fatalf("%q %q %v", c, k, err)
 	}
-	if _, _, err := xuiCertPaths(xuiSettings{}); err == nil || !strings.Contains(err.Error(), "3x-ui") {
+	if _, _, err := xuiCertPaths(&xuiSettings{}); err == nil || !strings.Contains(err.Error(), "3x-ui") {
 		t.Fatalf("unconfigured: %v", err)
 	}
 }

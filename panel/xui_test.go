@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeXUI mimics the two 3x-ui endpoints regionhop uses.
@@ -60,7 +62,7 @@ func TestXUIApply(t *testing.T) {
 	f := newFakeXUI(t, `{"log":{"loglevel":"warning"},"outbounds":[{"tag":"direct","protocol":"freedom"},{"tag":"regionhop-old","protocol":"socks","settings":{"address":"127.0.0.1","port":1}},{"tag":"mine","protocol":"vless"}]}`)
 	s := xuiSettings{Enabled: true, URL: f.srv.URL + "/base", Token: "tok"}
 
-	changed, err := xuiApply(s, map[string]int{"de": 19000, "us": 19001})
+	changed, err := xuiApply(&s, map[string]int{"de": 19000, "us": 19001})
 	if err != nil || !changed {
 		t.Fatalf("first apply: %v %v", changed, err)
 	}
@@ -73,11 +75,11 @@ func TestXUIApply(t *testing.T) {
 	}
 
 	// Same state again: nothing may be written (a save restarts 3x-ui's Xray).
-	if changed, err = xuiApply(s, map[string]int{"de": 19000, "us": 19001}); err != nil || changed || f.updates != 1 {
+	if changed, err = xuiApply(&s, map[string]int{"de": 19000, "us": 19001}); err != nil || changed || f.updates != 1 {
 		t.Fatalf("second apply: changed=%v err=%v updates=%d", changed, err, f.updates)
 	}
 	// A moved port is corrected, a removed location is dropped.
-	if changed, err = xuiApply(s, map[string]int{"de": 19005}); err != nil || !changed {
+	if changed, err = xuiApply(&s, map[string]int{"de": 19005}); err != nil || !changed {
 		t.Fatalf("third apply: %v %v", changed, err)
 	}
 	if got := strings.Join(tags(t, f.cfg), ","); strings.Contains(got, "us") || !strings.Contains(f.cfg, "19005") {
@@ -87,11 +89,11 @@ func TestXUIApply(t *testing.T) {
 
 func TestXUIBadToken(t *testing.T) {
 	f := newFakeXUI(t, `{"outbounds":[]}`)
-	_, _, err := xuiGetConfig(xuiSettings{URL: f.srv.URL + "/base", Token: "nope"})
+	_, _, err := xuiGetConfig(&xuiSettings{URL: f.srv.URL + "/base", Token: "nope"})
 	if err == nil || !strings.Contains(err.Error(), "unauthorized") {
 		t.Fatalf("want unauthorized, got %v", err)
 	}
-	_, _, err = xuiGetConfig(xuiSettings{URL: f.srv.URL + "/wrong", Token: "tok"})
+	_, _, err = xuiGetConfig(&xuiSettings{URL: f.srv.URL + "/wrong", Token: "tok"})
 	if err == nil {
 		t.Fatal("wrong path should fail")
 	}
@@ -130,5 +132,56 @@ func TestSettingsPageRendersXUICard(t *testing.T) {
 		if strings.Contains(body, "tok") && strings.Contains(body, `name="xui_token" value=`) {
 			t.Errorf("%s: token must never be sent back to the page", lang)
 		}
+	}
+}
+
+// 3x-ui with SSL answers plain http with a redirect to https on the same
+// address; the call must follow that once and keep the https address.
+func TestXUIUpgradesToHTTPS(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	ln.Close()
+	fake := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Requested-With") != "XMLHttpRequest" || r.Header.Get("Authorization") != "Bearer tok" {
+			w.WriteHeader(401)
+			return
+		}
+		w.Write([]byte(`{"success":true,"obj":{"webCertFile":"/c","webKeyFile":"/k"}}`))
+	})
+	srv := func(h http.Handler) *http.Server { return &http.Server{Addr: addr, Handler: h} }
+	go serveMixed(addr, srv(redirectWhenSSL(fake)), srv(fake))
+	time.Sleep(200 * time.Millisecond)
+	sslCert.Store(selfSigned(t))
+	sslEnabled.Store(true)
+	t.Cleanup(func() { sslEnabled.Store(false); sslCert.Store(nil) })
+
+	s := xuiSettings{URL: "http://" + addr + "/base", Token: "tok"}
+	c, k, err := xuiCertPaths(&s)
+	if err != nil || c != "/c" || k != "/k" {
+		t.Fatalf("%q %q %v", c, k, err)
+	}
+	if !strings.HasPrefix(s.URL, "https://"+addr) {
+		t.Fatalf("URL not upgraded: %s", s.URL)
+	}
+}
+
+// A request 3x-ui can't authenticate must produce a readable error, not a bare status code.
+func TestXUIRedirectAndUnauthorizedMessages(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/redir") {
+			http.Redirect(w, r, "/login/", http.StatusTemporaryRedirect)
+			return
+		}
+		w.WriteHeader(401)
+		w.Write([]byte(`{"success":false,"msg":"Please login again"}`))
+	}))
+	defer srv.Close()
+	_, _, err := xuiGetConfig(&xuiSettings{URL: srv.URL + "/redir", Token: "x"})
+	if err == nil || !strings.Contains(err.Error(), "redirected") || !strings.Contains(err.Error(), "/login/") {
+		t.Fatalf("redirect: %v", err)
+	}
+	_, _, err = xuiGetConfig(&xuiSettings{URL: srv.URL, Token: "x"})
+	if err == nil || !strings.Contains(err.Error(), "token was not accepted") {
+		t.Fatalf("401: %v", err)
 	}
 }
