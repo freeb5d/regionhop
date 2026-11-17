@@ -257,6 +257,16 @@ location with 3x-ui's own routing rules.
    `http://127.0.0.1:2053/yourpath`) and the token, and press **Test**, then
    **Save**.
 
+> **Use the local address, not the server's public IP.** Write the address as
+> `127.0.0.1` (the server talking to itself), with 3x-ui's port and web path:
+> `http://127.0.0.1:<port>/<path>`. Do **not** use the server's public IP or
+> its domain name: connecting to the API that way usually fails (the request
+> goes out through the network and the firewall, or the certificate does not
+> match the address). To find the port and path, open 3x-ui's own settings
+> (Settings → Panel), or look at the address you use in your browser. If your
+> 3x-ui has SSL turned on, the `http://` address is switched to `https://`
+> automatically, and its certificate is not checked on `127.0.0.1`.
+
 Each location becomes an outbound named `regionhop-<name>` that points at its
 local SOCKS port. Adding a location creates its outbound, removing one deletes
 it, and the panel re-syncs when it starts. Only outbounds with the
