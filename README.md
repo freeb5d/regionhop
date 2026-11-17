@@ -294,6 +294,40 @@ the same port as before; while SSL is on, `http://` links redirect to
 `https://`. Turn it off in the same place. The helper only accepts PEM
 certificates and matching keys, so it can't be used to read other files.
 
+## Telegram bot
+
+Manage the panel from Telegram, with buttons.
+
+1. In Telegram, talk to **@BotFather**, create a bot and copy its **token**.
+2. Find your **numeric Telegram ID**: open your new bot and send `/start`. It
+   replies with your number (a user name like `@name` does not work).
+3. In regionhop open **Settings → Telegram bot**, tick *Turn on the Telegram
+   bot*, paste the token and your ID (several admins: separate with commas), and
+   save. The panel reads the bot's name from Telegram and shows it, and sends
+   each admin a hello message. If an admin never opened the bot, press **Start**
+   in it first.
+
+What you can do in the bot:
+
+- **Menu** (`/menu`): a main menu with 📋 Locations, ➕ Add location,
+  🔄 Restart all, 💾 Backup and Help.
+- **Locations**: every location with its status and exit country. Tap one for
+  its card: 🔄 *New IP* (restart), 🧪 *Test* (delay and exit IP), 🔎 *Google*
+  (is Google/Gemini open from that IP), ⏹ *Stop* / ▶ *Start*, 🗑 *Remove*. The
+  card updates in place, so the chat stays tidy.
+- **Add location**: pick a country from the buttons, confirm, done. The
+  location is named after the country code (`gb`, `gb-2`, ...). You can also type
+  `/add name REGION`, like `/add uk GB`.
+- **Backup**: `/backup` sends the same JSON file as *Settings → Backup*.
+
+Only the admin IDs you list can use the bot, and only in a private chat with
+it; anyone else is just told their own ID. Old messages are ignored after a
+restart, and removing a location or restarting all asks for confirmation. The
+panel only needs to reach `api.telegram.org` (it polls; there is no webhook and
+no open port). The bot token is stored in `/opt/psi-panel/data/telegram.json`
+(mode 0600) and is never shown again. Note that a backup sent through Telegram
+contains your Psiphon config, so only add admins you trust.
+
 ## Managing it over SSH
 
 ```bash

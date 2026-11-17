@@ -30,6 +30,7 @@
         <a href="#upstream">{{t .Lang "upstream.title"}}</a>
         <a href="#xui">{{t .Lang "xui.title"}}</a>
         <a href="#ssl">{{t .Lang "ssl.title"}}</a>
+        <a href="#telegram">{{t .Lang "tg.title"}}</a>
         <a href="#autorestart">{{t .Lang "autorestart.title"}}</a>
         <a href="#backup">{{t .Lang "backup.title"}}</a>
       </nav>
@@ -177,6 +178,38 @@
               <span class="spacer"></span>
               <button type="button" class="btn-ghost" id="ssl-xui-btn">{{t .Lang "ssl.fromxui"}}</button>
               <button type="submit">{{t .Lang "ssl.submit"}}</button>
+            </footer>
+          </form>
+        </section>
+
+        <!-- ───────── Telegram bot ───────── -->
+        <section class="set-card" id="telegram">
+          <header class="set-head">
+            <h2>{{t .Lang "tg.title"}}</h2>
+            <p>{{t .Lang "tg.desc"}}</p>
+          </header>
+          <form method="post" action="{{url "/settings/telegram"}}" id="tg-form">
+            <div class="set-body">
+              {{if .TGSaved}}<div class="alert alert-success">{{t .Lang "tg.saved"}}</div>{{end}}
+              {{if .TGWarn}}<div class="alert alert-error">{{t .Lang "tg.warn"}} {{.TGWarn}}</div>{{end}}
+              {{if .TGError}}<div class="alert alert-error">{{.TGError}}</div>{{end}}
+              <label class="check"><input type="checkbox" name="tg_enabled" value="1" {{if .TG.Enabled}}checked{{end}}> {{t .Lang "tg.enable"}}</label>
+              <div class="field">
+                <label for="tg-token">{{t .Lang "tg.token"}}</label>
+                <input type="password" id="tg-token" name="tg_token" autocomplete="new-password" spellcheck="false" dir="ltr" placeholder="{{if .TG.HasToken}}{{t .Lang "tg.token.saved"}}{{else}}123456:ABC-DEF…{{end}}">
+              </div>
+              {{if .TG.BotName}}<p class="hint">{{t .Lang "tg.bot"}}: <strong dir="ltr">{{.TG.BotName}}</strong></p>{{end}}
+              <div class="field">
+                <label for="tg-admins">{{t .Lang "tg.admins"}}</label>
+                <input type="text" id="tg-admins" name="tg_admins" autocomplete="off" spellcheck="false" dir="ltr" value="{{.TG.Admins}}" placeholder="123456789">
+              </div>
+              <p class="hint">{{t .Lang "tg.note"}}</p>
+              <p class="hint">{{t .Lang "tg.backupwarn"}}</p>
+              {{if .TG.LastError}}<p class="hint">{{t .Lang "tg.lasterror"}}: {{.TG.LastError}}</p>{{end}}
+            </div>
+            <footer class="set-foot">
+              <span class="spacer"></span>
+              <button type="submit">{{t .Lang "tg.submit"}}</button>
             </footer>
           </form>
         </section>

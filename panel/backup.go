@@ -34,9 +34,8 @@ type backupFile struct {
 	AutoRestart *autoRestartSettings `json:"auto_restart,omitempty"`
 }
 
-// handleBackupExport streams the current registry + Psiphon config as a
-// single downloadable JSON file.
-func (a *app) handleBackupExport(w http.ResponseWriter, r *http.Request) {
+// buildBackup returns the backup JSON and its suggested file name.
+func (a *app) buildBackup() ([]byte, string, error) {
 	a.mu.Lock()
 	list, err := loadRegistry(registryPath)
 	creds := a.creds
@@ -44,8 +43,7 @@ func (a *app) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 	autoRestart := loadAutoRestart()
 	a.mu.Unlock()
 	if err != nil {
-		http.Error(w, "failed reading registry: "+err.Error(), 500)
-		return
+		return nil, "", fmt.Errorf("failed reading registry: %w", err)
 	}
 
 	b := backupFile{
@@ -59,11 +57,19 @@ func (a *app) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
-		http.Error(w, "failed encoding backup: "+err.Error(), 500)
+		return nil, "", fmt.Errorf("failed encoding backup: %w", err)
+	}
+	return body, fmt.Sprintf("regionhop-backup-%s.json", time.Now().UTC().Format("2006-01-02")), nil
+}
+
+// handleBackupExport streams the current registry + Psiphon config as a
+// single downloadable JSON file.
+func (a *app) handleBackupExport(w http.ResponseWriter, r *http.Request) {
+	body, filename, err := a.buildBackup()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
 		return
 	}
-
-	filename := fmt.Sprintf("regionhop-backup-%s.json", time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	w.Write(body)

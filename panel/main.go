@@ -123,6 +123,7 @@ func main() {
 	a.startAutoRestart()
 	ensureNoEstablishTimeout(configsDir)
 	startSSL()
+	a.startTelegram()
 	xuiSyncAsync()
 
 	// Everything is served under basePath (e.g. "/x7k9m2p4") when
@@ -145,6 +146,7 @@ func main() {
 	mux.HandleFunc(basePath+"/settings", a.requireAuth(a.handleSettings))
 	mux.HandleFunc(basePath+"/settings/upstream", a.requireAuth(a.handleUpstream))
 	mux.HandleFunc(basePath+"/settings/upstream/test", a.requireAuth(a.handleUpstreamTest))
+	mux.HandleFunc(basePath+"/settings/telegram", a.requireAuth(a.handleTelegram))
 	mux.HandleFunc(basePath+"/settings/ssl", a.requireAuth(a.handleSSL))
 	mux.HandleFunc(basePath+"/settings/ssl/from-xui", a.requireAuth(a.handleSSLFromXUI))
 	mux.HandleFunc(basePath+"/settings/xui", a.requireAuth(a.handleXUI))
@@ -457,14 +459,22 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 	limitBody(w, r, 64<<10)
 	name := strings.TrimSpace(r.FormValue("name"))
 	region := strings.TrimSpace(r.FormValue("region"))
-
-	if !validName(name) {
-		http.Error(w, "invalid name: use lowercase letters, digits, hyphens (2-31 chars)", 400)
+	if code, err := a.addLocation(name, region); err != nil {
+		http.Error(w, err.Error(), code)
 		return
 	}
+	http.Redirect(w, r, urlFor("/"), http.StatusSeeOther)
+}
+
+// addLocation creates, registers and starts a new location. When it returns
+// an error, the int is the HTTP status that fits it. Shared by the web form
+// and the Telegram bot.
+func (a *app) addLocation(name, region string) (int, error) {
+	if !validName(name) {
+		return 400, fmt.Errorf("invalid name: use lowercase letters, digits, hyphens (2-31 chars)")
+	}
 	if _, ok := regionCodes[region]; !ok {
-		http.Error(w, "invalid region", 400)
-		return
+		return 400, fmt.Errorf("invalid region")
 	}
 
 	a.mu.Lock()
@@ -472,31 +482,26 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 
 	list, err := loadRegistry(registryPath)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return 500, err
 	}
 	for _, t := range list {
 		if t.Name == name {
-			http.Error(w, "a location with this name already exists", 409)
-			return
+			return 409, fmt.Errorf("a location with this name already exists")
 		}
 	}
 
 	port, err := findFreePort(list, portBase, portMax)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return 500, err
 	}
 
 	t := Tunnel{Name: name, Region: region, SocksPort: port}
 	if err := writeTunnelConfig(configsDir, dataDir, t, a.creds); err != nil {
-		http.Error(w, "failed writing config: "+err.Error(), 500)
-		return
+		return 500, fmt.Errorf("failed writing config: %w", err)
 	}
 	list = append(list, t)
 	if err := saveRegistry(registryPath, list); err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return 500, err
 	}
 	// Must happen before startTunnel: sudo only permits controlling units
 	// whose exact name is already in the sudoers rule (see
@@ -510,8 +515,7 @@ func (a *app) handleAdd(w http.ResponseWriter, r *http.Request) {
 		log.Printf("start %s: %v", name, err)
 	}
 	xuiSyncAsync()
-
-	http.Redirect(w, r, urlFor("/"), http.StatusSeeOther)
+	return 0, nil
 }
 
 func (a *app) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -578,6 +582,7 @@ func credsTemplateData(c psiphonCreds, saved bool, errMsg string) map[string]any
 		"XrayAvailable": xrayErr == nil,
 		"XUI":           xuiTemplateData(),
 		"SSL":           sslTemplateData(),
+		"TG":            telegramTemplateData(),
 	}
 	for k, v := range autoRestartTemplateData() {
 		data[k] = v
@@ -662,29 +667,35 @@ func (a *app) handleTunnelAction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		stopTunnel(name)
-		removeTunnelConfig(configsDir, name)
-		os.RemoveAll(filepath.Join(dataDir, name))
-		list, err := loadRegistry(registryPath)
-		if err == nil {
-			out := list[:0]
-			for _, t := range list {
-				if t.Name != name {
-					out = append(out, t)
-				}
-			}
-			saveRegistry(registryPath, out)
-		}
-		xuiSyncAsync()
-		invalidateRows()
-		if err := refreshSudoersRule(); err != nil {
-			log.Printf("refresh sudoers after removing %s: %v", name, err)
-		}
+		a.removeLocation(name)
 	default:
 		http.NotFound(w, r)
 		return
 	}
 	http.Redirect(w, r, urlFor("/"), http.StatusSeeOther)
+}
+
+// removeLocation stops a location and deletes its config, data and registry
+// entry. Shared by the web page and the Telegram bot.
+func (a *app) removeLocation(name string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	stopTunnel(name)
+	removeTunnelConfig(configsDir, name)
+	os.RemoveAll(filepath.Join(dataDir, name))
+	list, err := loadRegistry(registryPath)
+	if err == nil {
+		out := list[:0]
+		for _, t := range list {
+			if t.Name != name {
+				out = append(out, t)
+			}
+		}
+		saveRegistry(registryPath, out)
+	}
+	xuiSyncAsync()
+	invalidateRows()
+	if err := refreshSudoersRule(); err != nil {
+		log.Printf("refresh sudoers after removing %s: %v", name, err)
+	}
 }
