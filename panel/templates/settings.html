@@ -137,6 +137,7 @@
                 <input type="password" id="xui-token" name="xui_token" autocomplete="new-password" spellcheck="false" placeholder="{{if .XUI.HasToken}}{{t .Lang "xui.token.saved"}}{{else}}{{t .Lang "xui.token.hint"}}{{end}}">
               </div>
               <p class="hint">{{t .Lang "xui.note"}}</p>
+              <p class="hint"><strong>{{t .Lang "xui.local"}}</strong></p>
               {{if .XUI.LastSync}}<p class="hint">{{t .Lang "xui.last"}}: {{.XUI.LastSync}}{{if .XUI.LastError}} — {{.XUI.LastError}}{{end}}</p>{{end}}
               <div class="test-result" id="xui-result" role="status" aria-live="polite"></div>
             </div>
