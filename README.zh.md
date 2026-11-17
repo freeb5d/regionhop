@@ -26,6 +26,7 @@ Web 面板 + SSH 命令行。SOCKS 代理始终只在本机可访问。
 - [可用地区](#可用地区)
 - [出口地区](#出口地区)
 - [Upstream](#upstream)
+- [Telegram 机器人](#telegram-机器人)
 - [通过 SSH 管理](#通过-ssh-管理)
 - [更新](#更新)
 - [目录结构](#目录结构)
@@ -48,6 +49,7 @@ SOCKS5 代理——仅绑定在 `127.0.0.1`，因此**永远无法从服务器�
 - 🖥 **Web 面板** — 密码使用 bcrypt 哈希存储、签名会话 Cookie、登录失败次数超限自动锁定、安装时随机分配监听端口
 - 📡 **真实连接状态** — 面板依据隧道自身发出的通知区分 *connecting*（连接中）与 *active*（已连接），连接成功后还会显示出口地区和对应国旗
 - 🔀 **上游代理** — 在本机网络屏蔽 Psiphon 的服务器上，让所有隧道先经过 SOCKS/HTTP 代理或 V2Ray 链接（VLESS/VMess/Trojan/Shadowsocks，由内置的 Xray 运行）——见 [Upstream](#upstream)
+- 🤖 **Telegram 机器人** — 用按钮在 Telegram 里管理面板：添加线路、重启、测试、删除、获取备份
 - ⌨️ **SSH 端控制** — 喜欢命令行的话可以用 `psictl list|start|stop|restart|logs`
 - ⚙️ **完全基于 systemd** — 每条隧道以及面板本身都是普通的 systemd 服务：`systemctl status`、`journalctl`、失败自动重启,一应俱全
 - 🔄 **自我更新** — 一条命令即可拉取最新版本并重启面板；有新版本时面板会自动提示
@@ -183,6 +185,39 @@ Psiphon 只能指定出口国家，不能指定具体城市。
 
 - **SOCKS / HTTP 代理** — 形如 `socks5://127.0.0.1:1080` 或 `http://user:pass@host:3128` 的地址（交给 Psiphon 自带的 `UpstreamProxyUrl`）。
 - **V2Ray** — 粘贴 `vless://`、`vmess://`、`trojan://` 或 `ss://` 链接，或 Xray 出站 JSON。regionhop 用内置的 Xray（`regionhop-upstream.service`）运行它，SOCKS 入口仅监听 `127.0.0.1:18999`，并在应用前用 `xray run -test` 检查配置。
+
+## Telegram 机器人
+
+用按钮在 Telegram 里管理面板。
+
+1. 在 Telegram 中找到 **@BotFather**，创建机器人并复制它的 **令牌（token）**。
+2. 查出你自己的 **数字 ID**：打开新机器人并发送 `/start`，它会回复你的数字（`@name` 这样的用户名不行）。
+3. 在面板中打开 **Settings → Telegram bot**，勾选启用，粘贴令牌和你的 ID（多个管理员用逗号分隔），然后保存。面板会从 Telegram 读取机器人名称并显示，同时给每位管理员发一条问候消息。如果某位管理员还没打开过机器人，请先在里面点 **Start**。
+
+机器人里可以做的事：
+
+- **菜单**（`/menu`）：📋 线路、➕ 添加线路、🔄 全部重启、💾 备份、帮助。
+- **线路**：每条线路及其状态和出口国家。点某条线路打开它的卡片：🔄 *换新 IP*、🧪 *测试*（延迟和出口 IP）、🔎 *Google*（该 IP 能否访问 Google/Gemini）、⏹ *停止* / ▶ *启动*、🗑 *删除*。卡片会原地更新。
+- **添加线路**：用按钮选国家并确认。线路名取自国家代码（`gb`、`gb-2`……）。
+- **备份**：`/backup` 发送与 *Settings → Backup* 相同的 JSON 文件。
+### 命令
+
+| 命令 | 作用 |
+|---|---|
+| `/menu` | 主菜单 |
+| `/list` | 线路及其状态 |
+| `/add` | 用按钮选择国家并添加线路 |
+| `/add <name> <REGION>` | 用自定义名称添加，例如 `/add uk GB` |
+| `/restart <name>` | 重启线路（换新 IP） |
+| `/on <name>  ·  /stop <name>` | 启动或停止线路 |
+| `/test <name>` | 延迟和出口 IP |
+| `/google <name>` | 该 IP 能否访问 Google/Gemini |
+| `/remove <name>` | 删除线路（需确认） |
+| `/regions` | 地区代码列表 |
+| `/backup` | 发送备份文件 |
+| `/help` | 帮助 |
+
+只有你在面板里填写的 ID，并且只能在与机器人的私聊中，才能使用它；其他人只会被告知他们自己的 ID。重启后旧消息会被忽略，删除线路和“全部重启”都需要确认。面板只需能访问 `api.telegram.org`（使用 polling，不需要 webhook 或开放端口）。令牌保存在 `/opt/psi-panel/data/telegram.json`（权限 0600），不会再次显示。注意：通过 Telegram 发送的备份包含你的 Psiphon 配置，请只添加你信任的管理员。
 
 ## 通过 SSH 管理
 

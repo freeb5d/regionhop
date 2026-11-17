@@ -27,6 +27,10 @@ Web panel + SSH CLI. SOCKS proxies stay local to the box — always.
 - [Using it](#using-it)
 - [Available regions](#available-regions)
 - [Exit region](#exit-region)
+- [Upstream](#upstream)
+- [Connect it to 3x-ui](#connect-it-to-3x-ui)
+- [HTTPS for the panel](#https-for-the-panel)
+- [Telegram bot](#telegram-bot)
 - [Managing it over SSH](#managing-it-over-ssh)
 - [Updating](#updating)
 - [How it's laid out](#how-its-laid-out)
@@ -52,6 +56,9 @@ a `psictl` command.
 - 🕒 **Auto restart** — restart all your locations, or just the ones you pick, on a schedule you choose (every N hours, days or weeks) from the panel's Settings page, so connections don't go stale over days of uptime
 - 🌐 **Exit IP check** — the latency test also shows the address websites see for traffic through each location
 - 🔀 **Upstream proxy** — on servers whose network blocks Psiphon, send every tunnel through a SOCKS/HTTP proxy or a V2Ray link (VLESS/VMess/Trojan/Shadowsocks, run by a bundled Xray) first — see [Upstream](#upstream)
+- 🤖 **Telegram bot** — manage the panel from Telegram with buttons: add a location, restart, test, remove, get the backup
+- 🔗 **3x-ui integration** — every location is added to your 3x-ui panel as a SOCKS outbound, automatically
+- 🔐 **HTTPS for the panel** — use a certificate you already have (typed in, or read from 3x-ui)
 - ⌨️ **SSH-side control** — `psictl list|start|stop|restart|logs` for anyone who prefers the terminal
 - ⚙️ **systemd-native** — every tunnel and the panel itself are ordinary systemd services: `systemctl status`, `journalctl`, auto-restart on failure, all work as expected
 - 🔄 **Self-updating** — one command pulls the latest release and restarts the panel; the dashboard tells you when one's available
@@ -319,6 +326,23 @@ What you can do in the bot:
   location is named after the country code (`gb`, `gb-2`, ...). You can also type
   `/add name REGION`, like `/add uk GB`.
 - **Backup**: `/backup` sends the same JSON file as *Settings → Backup*.
+
+Commands (most of them are also available as buttons):
+
+| Command | What it does |
+|---|---|
+| `/menu` | main menu |
+| `/list` | locations and their status |
+| `/add` | pick a country from buttons and add a location |
+| `/add <name> <REGION>` | add with your own name, e.g. `/add uk GB` |
+| `/restart <name>` | restart a location (new IP) |
+| `/on <name>  ·  /stop <name>` | start or stop a location |
+| `/test <name>` | delay and exit IP |
+| `/google <name>` | is Google/Gemini open from its IP |
+| `/remove <name>` | remove a location (asks to confirm) |
+| `/regions` | list of region codes |
+| `/backup` | send the backup file |
+| `/help` | help |
 
 Only the admin IDs you list can use the bot, and only in a private chat with
 it; anyone else is just told their own ID. Old messages are ignored after a
